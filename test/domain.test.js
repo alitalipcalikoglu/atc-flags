@@ -137,3 +137,16 @@ test('FlagService: every change is published as flag.changed without values; fai
     ['flag.changed', { key: 'a.b', env: null, action: 'flag.delete', actor: 'console' }],
   ]);
 });
+
+test('evaluation counts are lifetime counters: flushed to the database, added to what is in memory, never lost on a flush', () => {
+  const { service, flags } = testService();
+  service.create({ key: 'count.me', kind: 'boolean' }, 'console', 1);
+  for (let i = 0; i < 3; i += 1) service.evaluate('prod', {});
+  assert.deepEqual([service.evaluationTotal('prod'), flags.evaluationsOf('prod')], [3, 0], 'in memory until the flush');
+  service.flushEvaluations();
+  service.evaluate('prod', {});
+  assert.deepEqual([service.evaluationTotal('prod'), flags.evaluationsOf('prod'), service.evaluationTotal('dev')], [4, 3, 0]);
+  service.flushEvaluations();
+  service.flushEvaluations();
+  assert.equal(flags.evaluationsOf('prod'), 4, 'an empty flush changes nothing');
+});

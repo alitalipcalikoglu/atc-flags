@@ -69,7 +69,7 @@ Errors are JSON: `{ "error": { "code", "message", "details?" } }`.
 | GET | `/v1/evaluate` | read | `env`, `userId`, `email`, `attrs.<name>`, `keys` (comma list), `details` → `{ env, version, flags }`. |
 | POST | `/v1/evaluate` | read | `{ env, context?, keys?, details? }`, same result. |
 | GET | `/v1/snapshot/:env` | read | Full rule set with `ETag` for local evaluation; `304` on `If-None-Match`. |
-| GET | `/v1/stats` | read | Flag counts, per environment: version, enabled count, evaluations since start. |
+| GET | `/v1/stats` | read | Flag counts, per environment: version, enabled count, evaluations over the lifetime of the database. |
 | GET | `/metrics` | read | Prometheus text. |
 
 Error codes: `FLAG_NOT_FOUND`, `FLAG_EXISTS`, `UNKNOWN_ENV`, `INVALID_VALUE`, `INVALID_RULE`, `VALUE_TOO_LARGE`, `INVALID_CURSOR`, `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMITED`.

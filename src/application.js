@@ -30,6 +30,8 @@ export class Application {
     this.app = null;
     /** @type {Maintenance|null} */
     this.maintenance = null;
+    /** @type {NodeJS.Timeout|null} */
+    this.evalTimer = null;
     /** @type {(reason: string) => Promise<void>} */
     this.shutdown = async () => {};
   }
@@ -57,14 +59,18 @@ export class Application {
       forceExitMs: 30_000,
       log: app.log,
       steps: [
+        () => { if (this.evalTimer) clearInterval(this.evalTimer); },
         () => this.maintenance?.stop(),
         () => this.app?.close(),
+        () => this.service.flushEvaluations(),
         () => this.publisher.close(),
         () => this.audit.close(),
         () => this.db.close(),
       ],
     });
     this.shutdown = shutdown;
+    this.evalTimer = setInterval(() => { try { this.service.flushEvaluations(); } catch (err) { app.log.warn({ err }, 'evaluation counts not flushed'); } }, 10_000);
+    this.evalTimer.unref();
     this.audit.logger = app.log;
     this.publisher.logger = app.log;
     this.audit.start();

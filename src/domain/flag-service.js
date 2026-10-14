@@ -44,7 +44,7 @@ export class FlagService {
     this.check = check;
     this.environments = environments;
     this.publisher = publisher ?? { publish: () => false };
-    /** Evaluations since start, per environment. @type {Map<string, number>} */
+    /** Evaluations since the last flush, per environment (the rest is in `eval_counts`). @type {Map<string, number>} */
     this.evaluations = new Map();
     /** Cached environment states keyed by env; invalidated by version. @type {Map<string, { version: number, states: Map<string, { salt: string, kind: FlagKind, state: EnvState }> }>} */
     this.cache = new Map();
@@ -222,6 +222,19 @@ export class FlagService {
     const entry = { version, states };
     this.cache.set(env, entry);
     return entry;
+  }
+
+  /** Lifetime evaluations of an environment: stored total plus what has not been flushed yet. @param {string} env */
+  evaluationTotal(env) {
+    return this.flags.evaluationsOf(env) + (this.evaluations.get(env) ?? 0);
+  }
+
+  /** Move the in-memory evaluation counts into the database (they are lifetime counters). Called on a timer and at shutdown. */
+  flushEvaluations() {
+    if (this.evaluations.size === 0) return;
+    const pending = [...this.evaluations];
+    this.evaluations = new Map();
+    this.db.transaction(() => { for (const [env, n] of pending) this.flags.addEvaluations(env, n); });
   }
 
   /**

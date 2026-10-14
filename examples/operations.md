@@ -22,7 +22,7 @@ flags_evaluations_total{env="prod"} 188120
 flags_process_uptime_seconds 86400
 ```
 
-`flags_evaluations_total` counts evaluation requests (not flags) since the process started.
+`flags_evaluations_total` counts evaluation requests (not flags) over the lifetime of the database: kept in memory and written every 10 seconds and at shutdown, so a crash loses at most 10 seconds and a restart does not reset the counter.
 
 ## Environment
 

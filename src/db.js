@@ -37,6 +37,12 @@ export class Database extends CoreDatabase {
       version INTEGER NOT NULL DEFAULT 0
     );
 
+    -- Lifetime evaluation counts per environment, flushed from memory every few seconds.
+    CREATE TABLE eval_counts (
+      env   TEXT PRIMARY KEY,
+      total INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE history (
       id      INTEGER PRIMARY KEY AUTOINCREMENT,
       key     TEXT NOT NULL,

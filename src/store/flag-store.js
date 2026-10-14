@@ -88,6 +88,16 @@ export class FlagStore {
     this.stmt.bumpVersion.run(env);
   }
 
+  /** Add `n` to an environment's lifetime evaluation count. @param {string} env @param {number} n */
+  addEvaluations(env, n) {
+    this.db.prepare('INSERT INTO eval_counts (env, total) VALUES (?, ?) ON CONFLICT (env) DO UPDATE SET total = total + excluded.total').run(env, n);
+  }
+
+  /** @param {string} env */
+  evaluationsOf(env) {
+    return Number(/** @type {{ total: number }|undefined} */ (this.db.prepare('SELECT total FROM eval_counts WHERE env = ?').get(env))?.total ?? 0);
+  }
+
   /** @param {string} env */
   version(env) {
     const r = /** @type {{ version: number }|undefined} */ (this.stmt.version.get(env));

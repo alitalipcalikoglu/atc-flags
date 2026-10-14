@@ -189,7 +189,7 @@ export class FlagsApi {
       const visible = this.#visibleEnvs(request);
       return {
         flags: { total: c.total, archived: c.archived },
-        environments: visible.map((e) => ({ env: e, version: this.flags.version(e), enabled: c.byEnv.find((x) => x.env === e)?.enabled ?? 0, evaluations: s.evaluations.get(e) ?? 0 })),
+        environments: visible.map((e) => ({ env: e, version: this.flags.version(e), enabled: c.byEnv.find((x) => x.env === e)?.enabled ?? 0, evaluations: s.evaluationTotal(e) })),
       };
     });
   }
@@ -239,9 +239,9 @@ export class FlagsApi {
         '# HELP flags_env_version Change counter per environment.',
         '# TYPE flags_env_version gauge',
         ...this.config.environments.map((e) => `flags_env_version{env="${e}"} ${this.flags.version(e)}`),
-        '# HELP flags_evaluations_total Evaluation requests since start, per environment.',
+        '# HELP flags_evaluations_total Evaluation requests over the lifetime of the database, per environment.',
         '# TYPE flags_evaluations_total counter',
-        ...this.config.environments.map((e) => `flags_evaluations_total{env="${e}"} ${this.service.evaluations.get(e) ?? 0}`),
+        ...this.config.environments.map((e) => `flags_evaluations_total{env="${e}"} ${this.service.evaluationTotal(e)}`),
         ...AuditMetrics.lines(this.audit),
         ...(this.publisher?.metricLines() ?? []),
         '# HELP flags_process_uptime_seconds Process uptime.',
