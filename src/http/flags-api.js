@@ -7,6 +7,7 @@ import { FlagError } from '../domain/errors.js';
 import { ApiKeyAuth } from './api-key-auth.js';
 import { Schemas } from './schemas.js';
 import { Views } from './views.js';
+import { AuditMetrics } from '../audit-metrics.js';
 
 /** @typedef {import('../config.js').Config} Config */
 /** @typedef {import('../domain/flag-service.js').FlagService} FlagService */
@@ -239,6 +240,7 @@ export class FlagsApi {
         '# HELP flags_evaluations_total Evaluation requests since start, per environment.',
         '# TYPE flags_evaluations_total counter',
         ...this.config.environments.map((e) => `flags_evaluations_total{env="${e}"} ${this.service.evaluations.get(e) ?? 0}`),
+        ...AuditMetrics.lines(this.audit),
         '# HELP flags_process_uptime_seconds Process uptime.',
         '# TYPE flags_process_uptime_seconds gauge',
         `flags_process_uptime_seconds ${process.uptime().toFixed(0)}`,

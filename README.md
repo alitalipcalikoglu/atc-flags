@@ -148,6 +148,8 @@ trusted inbound `traceparent`, gated on `TRUST_PROXY`, continues the caller's tr
 span-id for this hop; see [OBSERVABILITY.md](../atc-stack/docs/OBSERVABILITY.md)). `/health` is a static check; `/ready` pings the database, cached for
 10s, and never mutates state. See [docs/READINESS.md](docs/READINESS.md) for the full contract.
 
+Audit forwarding is observable too: `audit_forward_enabled`, `audit_forward_events_total{result="recorded|sent|dropped|failed"}` and `audit_forward_pending`. A rising `dropped`, or a `pending` that does not drain, means audit events are being lost or delayed; alert on it.
+
 ## Backup / restore
 
 The only state to protect is the SQLite file at `DB_PATH` (default `./data/flags.db`, plus its WAL
