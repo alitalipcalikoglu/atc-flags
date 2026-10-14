@@ -9,6 +9,7 @@ import { FlagsApi } from './http/flags-api.js';
 import { Maintenance } from './maintenance.js';
 import { FlagStore } from './store/flag-store.js';
 import { HistoryStore } from './store/history-store.js';
+import { EventPublisher } from './events/event-publisher.js';
 
 /**
  * Composition root: wires configuration, storage, domain, HTTP and maintenance, and owns the
@@ -20,10 +21,11 @@ export class Application {
     this.config = config;
     this.version = readServiceVersion(import.meta.url);
     this.audit = new AuditClient({ target: config.audit });
+    this.publisher = new EventPublisher({ source: 'atc-flags', target: config.webhookOut });
     this.db = new Database(config.dbPath, { backupDir: config.dbBackupDir });
     this.flags = new FlagStore(this.db);
     this.history = new HistoryStore(this.db);
-    this.service = new FlagService({ db: this.db, flags: this.flags, history: this.history, check: new ValueCheck(config.maxValueBytes), environments: config.environments });
+    this.service = new FlagService({ db: this.db, flags: this.flags, history: this.history, check: new ValueCheck(config.maxValueBytes), environments: config.environments, publisher: this.publisher });
     /** @type {import('fastify').FastifyInstance|null} */
     this.app = null;
     /** @type {Maintenance|null} */
@@ -47,7 +49,7 @@ export class Application {
 
   async start() {
     const { config } = this;
-    const api = new FlagsApi({ config, audit: this.audit, service: this.service, flags: this.flags, history: this.history, db: this.db, version: this.version });
+    const api = new FlagsApi({ config, audit: this.audit, publisher: this.publisher, service: this.service, flags: this.flags, history: this.history, db: this.db, version: this.version });
     const app = await api.build();
     this.app = app;
     this.maintenance = new Maintenance({ history: this.history, log: app.log.child({ component: 'maintenance' }), options: { historyRetentionDays: config.historyRetentionDays } });
@@ -57,12 +59,14 @@ export class Application {
       steps: [
         () => this.maintenance?.stop(),
         () => this.app?.close(),
+        () => this.publisher.close(),
         () => this.audit.close(),
         () => this.db.close(),
       ],
     });
     this.shutdown = shutdown;
     this.audit.logger = app.log;
+    this.publisher.logger = app.log;
     this.audit.start();
     await app.listen({ port: config.port, host: config.host });
     app.log.info({ tls: config.tls !== null, environments: config.environments, flags: this.flags.counts().total }, config.tls ? 'serving HTTPS' : 'serving plain HTTP, terminate TLS at a reverse proxy');

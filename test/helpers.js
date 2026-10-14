@@ -28,13 +28,13 @@ export function testConfig(overrides) {
   return Config.fromEnv(testEnv(overrides));
 }
 
-/** Wired domain objects over an in-memory database. @param {Record<string, string>} [overrides] */
-export function testService(overrides) {
+/** Wired domain objects over an in-memory database. @param {Record<string, string>} [overrides] @param {any} [publisher] */
+export function testService(overrides, publisher) {
   const config = testConfig(overrides);
   const db = new Database(':memory:');
   const flags = new FlagStore(db);
   const history = new HistoryStore(db);
-  const service = new FlagService({ db, flags, history, check: new ValueCheck(config.maxValueBytes), environments: config.environments });
+  const service = new FlagService({ db, flags, history, check: new ValueCheck(config.maxValueBytes), environments: config.environments, publisher });
   return { config, db, flags, history, service };
 }
 

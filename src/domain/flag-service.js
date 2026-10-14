@@ -35,13 +35,15 @@ export class FlagService {
    * @param {HistoryStore} deps.history
    * @param {ValueCheck} deps.check
    * @param {string[]} deps.environments
+   * @param {{ publish: (type: string, data?: unknown) => boolean }} [deps.publisher]
    */
-  constructor({ db, flags, history, check, environments }) {
+  constructor({ db, flags, history, check, environments, publisher }) {
     this.db = db;
     this.flags = flags;
     this.history = history;
     this.check = check;
     this.environments = environments;
+    this.publisher = publisher ?? { publish: () => false };
     /** Evaluations since start, per environment. @type {Map<string, number>} */
     this.evaluations = new Map();
     /** Cached environment states keyed by env; invalidated by version. @type {Map<string, { version: number, states: Map<string, { salt: string, kind: FlagKind, state: EnvState }> }>} */
@@ -73,7 +75,7 @@ export class FlagService {
     if (this.flags.flag(input.key)) throw new FlagError('FLAG_EXISTS', `flag "${input.key}" already exists`);
     const value = this.check.value(input.kind, input.value ?? FlagService.defaultOn(input.kind), 'value');
     const offValue = this.check.value(input.kind, input.offValue ?? FlagService.defaultValue(input.kind), 'offValue');
-    return this.db.transaction(() => {
+    const created = this.db.transaction(() => {
       const row = this.flags.insertFlag({
         key: input.key, kind: input.kind, description: input.description ?? '', tags: FlagService.#tags(input.tags), archived: 0,
         rollout_salt: randomBytes(8).toString('hex'), created_by: actor, created_at: now, updated_at: now,
@@ -84,6 +86,8 @@ export class FlagService {
       this.history.record({ key: row.key, action: 'flag.create', actor, after: { kind: row.kind, description: row.description, tags: JSON.parse(row.tags), enabled: Boolean(input.enabled), value, offValue } }, now);
       return row;
     });
+    this.#changed('flag.create', input.key, null, actor);
+    return created;
   }
 
   /** @param {string} key */
@@ -106,12 +110,13 @@ export class FlagService {
     if (patch.tags !== undefined) next.tags = FlagService.#tags(patch.tags);
     if (patch.archived !== undefined) next.archived = patch.archived ? 1 : 0;
     if (patch.reshuffle) next.rollout_salt = randomBytes(8).toString('hex');
-    return this.db.transaction(() => {
+    this.db.transaction(() => {
       this.flags.updateFlag(next);
       if (next.archived !== row.archived || patch.reshuffle) for (const env of this.environments) this.flags.touch(env);
       this.history.record({ key, action: 'flag.update', actor, before: FlagService.#meta(row), after: FlagService.#meta(next) }, now);
-      return next;
     });
+    this.#changed('flag.update', key, null, actor);
+    return next;
   }
 
   /**
@@ -126,6 +131,7 @@ export class FlagService {
       for (const env of this.environments) this.flags.touch(env);
       this.history.record({ key, action: 'flag.delete', actor, before: FlagService.#meta(row) }, now);
     });
+    this.#changed('flag.delete', key, null, actor);
   }
 
   /**
@@ -156,11 +162,13 @@ export class FlagService {
     if (patch.offValue !== undefined) next.off_value = JSON.stringify(this.check.value(flag.kind, patch.offValue, 'offValue'));
     if (patch.percentage !== undefined) next.percentage = patch.percentage;
     if (patch.rules !== undefined) next.rules = JSON.stringify(this.check.rules(flag.kind, patch.rules));
-    return this.db.transaction(() => {
-      const saved = this.flags.updateEnv(next);
-      this.history.record({ key, env, action: 'env.update', actor, before: FlagService.state(row), after: FlagService.state(saved) }, now);
-      return saved;
+    const saved = this.db.transaction(() => {
+      const updated = this.flags.updateEnv(next);
+      this.history.record({ key, env, action: 'env.update', actor, before: FlagService.state(row), after: FlagService.state(updated) }, now);
+      return updated;
     });
+    this.#changed('env.update', key, env, actor, saved);
+    return saved;
   }
 
   /**
@@ -174,11 +182,13 @@ export class FlagService {
   copyEnv(key, from, to, actor, now = Date.now()) {
     const src = this.envState(key, from);
     const dst = this.envState(key, to);
-    return this.db.transaction(() => {
-      const saved = this.flags.updateEnv({ ...dst, enabled: src.enabled, value: src.value, off_value: src.off_value, percentage: src.percentage, rules: src.rules, updated_by: actor, updated_at: now });
-      this.history.record({ key, env: to, action: 'env.copy', actor, before: FlagService.state(dst), after: { from, ...FlagService.state(saved) } }, now);
-      return saved;
+    const saved = this.db.transaction(() => {
+      const copied = this.flags.updateEnv({ ...dst, enabled: src.enabled, value: src.value, off_value: src.off_value, percentage: src.percentage, rules: src.rules, updated_by: actor, updated_at: now });
+      this.history.record({ key, env: to, action: 'env.copy', actor, before: FlagService.state(dst), after: { from, ...FlagService.state(copied) } }, now);
+      return copied;
     });
+    this.#changed('env.copy', key, to, actor, saved);
+    return saved;
   }
 
   /**
@@ -248,6 +258,14 @@ export class FlagService {
    */
   static state(row) {
     return { enabled: row.enabled === 1, value: JSON.parse(row.value), offValue: JSON.parse(row.off_value), percentage: Number(row.percentage), rules: JSON.parse(row.rules) };
+  }
+
+  /**
+   * `flag.changed` for subscribers (clients refresh instead of polling). Carries what changed, never the values.
+   * @param {string} action @param {string} key @param {string|null} env @param {string} actor @param {EnvRow} [row]
+   */
+  #changed(action, key, env, actor, row) {
+    this.publisher.publish('flag.changed', { key, env, action, actor, ...(row ? { enabled: row.enabled === 1, percentage: Number(row.percentage) } : {}) });
   }
 
   /** @param {FlagRow} r */

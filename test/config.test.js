@@ -22,3 +22,9 @@ test('Config: rejects bad input', () => {
   bad({ FLAGS_ENVIRONMENTS: 'prod,prod' }, /unique/);
   bad({ TLS_CERT_PATH: '/x.pem' }, /must be set together/);
 });
+
+test('Config: WEBHOOK_OUT_URL and WEBHOOK_OUT_API_KEY come together', () => {
+  assert.equal(Config.fromEnv(testEnv()).webhookOut, null);
+  assert.equal(Config.fromEnv(testEnv({ WEBHOOK_OUT_URL: 'http://h:3009/', WEBHOOK_OUT_API_KEY: 'k' })).webhookOut?.url, 'http://h:3009');
+  assert.throws(() => Config.fromEnv(testEnv({ WEBHOOK_OUT_URL: 'http://h' })), ConfigError);
+});

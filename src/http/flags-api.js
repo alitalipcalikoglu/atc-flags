@@ -33,10 +33,12 @@ export class FlagsApi {
    * @param {string} deps.version
    * @param {import('../types.js').Logger} [deps.logger]
    * @param {import('@atc-web/atc-service-core/audit').AuditClient} [deps.audit]
+   * @param {import('../events/event-publisher.js').EventPublisher} [deps.publisher]
    */
-  constructor({ config, audit, service, flags, history, db, version, logger }) {
+  constructor({ config, audit, publisher, service, flags, history, db, version, logger }) {
     this.config = config;
     this.audit = audit;
+    this.publisher = publisher ?? null;
     this.service = service;
     this.flags = flags;
     this.history = history;
@@ -241,6 +243,7 @@ export class FlagsApi {
         '# TYPE flags_evaluations_total counter',
         ...this.config.environments.map((e) => `flags_evaluations_total{env="${e}"} ${this.service.evaluations.get(e) ?? 0}`),
         ...AuditMetrics.lines(this.audit),
+        ...(this.publisher?.metricLines() ?? []),
         '# HELP flags_process_uptime_seconds Process uptime.',
         '# TYPE flags_process_uptime_seconds gauge',
         `flags_process_uptime_seconds ${process.uptime().toFixed(0)}`,

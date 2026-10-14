@@ -119,3 +119,21 @@ test('FlagService: environment state, copy, evaluate with cache, snapshot', () =
   assert.deepEqual(service.list({ q: 'two' }, { limit: 10 }).items.map((f) => f.key), ['a.two']);
   err(() => service.list({}, { limit: 1, cursor: 'Bad!' }), 'INVALID_CURSOR');
 });
+
+test('FlagService: every change is published as flag.changed without values; failed changes publish nothing', () => {
+  /** @type {any[]} */ const out = [];
+  const { service } = testService(undefined, { publish: (/** @type {string} */ t, /** @type {any} */ d) => out.push([t, d]) });
+  service.create({ key: 'a.b', kind: 'boolean' }, 'console', 1);
+  service.updateEnv('a.b', 'prod', { enabled: true, percentage: 25 }, 'console', 2);
+  service.copyEnv('a.b', 'prod', 'staging', 'console', 3);
+  service.update('a.b', { description: 'x' }, 'console', 4);
+  service.remove('a.b', 'console', 5);
+  assert.throws(() => service.updateEnv('missing', 'prod', { enabled: true }, 'console', 6));
+  assert.deepEqual(out, [
+    ['flag.changed', { key: 'a.b', env: null, action: 'flag.create', actor: 'console' }],
+    ['flag.changed', { key: 'a.b', env: 'prod', action: 'env.update', actor: 'console', enabled: true, percentage: 25 }],
+    ['flag.changed', { key: 'a.b', env: 'staging', action: 'env.copy', actor: 'console', enabled: true, percentage: 25 }],
+    ['flag.changed', { key: 'a.b', env: null, action: 'flag.update', actor: 'console' }],
+    ['flag.changed', { key: 'a.b', env: null, action: 'flag.delete', actor: 'console' }],
+  ]);
+});

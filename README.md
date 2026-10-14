@@ -125,9 +125,13 @@ Class-based; dependencies are injected through constructors, `src/application.js
 
 - Multivariate experiments with metrics: a `string` flag serves the variant; measure in your analytics.
 - Scheduled changes ("enable at 09:00"): the [atc-scheduler](https://github.com/alitalipcalikoglu/atc-scheduler) service calls `PATCH …/envs/:env` at the right time; see its `examples/flags-scheduled-change.md`.
-- Webhooks on change: poll the snapshot with `If-None-Match`; one request every few seconds costs nothing.
+- Per-subscriber delivery of changes: the service publishes `flag.changed` to atc-webhook-out, which owns subscriptions, signing and retries. Polling the snapshot with `If-None-Match` stays the cheapest way for an SDK.
 - Numeric or regex conditions in rules: bucket values into strings on the application side.
 - Per-flag permissions inside one environment: use separate environments or separate instances.
+
+## Events
+
+With `WEBHOOK_OUT_URL` set, every flag or environment change publishes `flag.changed` (key, env, action, actor; never values). Best effort; see [examples/events.md](examples/events.md).
 
 ## Audit events
 
@@ -147,6 +151,8 @@ Requests are logged with `reqId` (accepts or generates `X-Request-Id`) and `trac
 trusted inbound `traceparent`, gated on `TRUST_PROXY`, continues the caller's trace with a fresh
 span-id for this hop; see [OBSERVABILITY.md](../atc-stack/docs/OBSERVABILITY.md)). `/health` is a static check; `/ready` pings the database, cached for
 10s, and never mutates state. See [docs/READINESS.md](docs/READINESS.md) for the full contract.
+
+Event publishing is observable as `events_publish_enabled`, `events_publish_total{result="published|sent|dropped|failed"}` and `events_publish_pending`.
 
 Audit forwarding is observable too: `audit_forward_enabled`, `audit_forward_events_total{result="recorded|sent|dropped|failed"}` and `audit_forward_pending`. A rising `dropped`, or a `pending` that does not drain, means audit events are being lost or delayed; alert on it.
 

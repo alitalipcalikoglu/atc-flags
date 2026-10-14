@@ -14,6 +14,7 @@ Scenario-driven walkthroughs of every feature. Requests to `/v1/*` need `Authori
 | [Change history](history.md) | Who changed what and when, per flag and globally |
 | [API keys, roles and environments](keys-and-roles.md) | Read, write, readwrite; scoping a key to one environment |
 | [Operations](operations.md) | Health, readiness, metrics, environment, PM2, Docker, retention |
+| [Events](events.md) | `flag.changed` through atc-webhook-out |
 | [Audit events](audit-events.md) | Which write actions are forwarded to the audit service, event shape, configuration |
 
 Set up once for the examples:
