@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
-import { AuditClient } from '@atc-web/service-core/audit';
-import { createErrorHandler, registerInfo, registerOpenApi, registerProbes, registerRequestContext, requestOptions } from '@atc-web/service-core/fastify';
+import { AuditClient } from '@atc-web/atc-service-core/audit';
+import { createErrorHandler, registerInfo, registerOpenApi, registerProbes, registerRequestContext, requestOptions } from '@atc-web/atc-service-core/fastify';
 import { FlagError } from '../domain/errors.js';
 import { ApiKeyAuth } from './api-key-auth.js';
 import { Schemas } from './schemas.js';
@@ -31,7 +31,7 @@ export class FlagsApi {
    * @param {import('../db.js').Database} deps.db
    * @param {string} deps.version
    * @param {import('../types.js').Logger} [deps.logger]
-   * @param {import('@atc-web/service-core/audit').AuditClient} [deps.audit]
+   * @param {import('@atc-web/atc-service-core/audit').AuditClient} [deps.audit]
    */
   constructor({ config, audit, service, flags, history, db, version, logger }) {
     this.config = config;
@@ -69,7 +69,7 @@ export class FlagsApi {
     registerProbes(app, () => this.db.ping(), { cacheMs: FlagsApi.READY_CACHE_MS });
     registerOpenApi(app, new URL('../../openapi.yaml', import.meta.url));
     registerInfo(app, {
-      service: 'flags',
+      service: 'atc-flags',
       version: this.version,
       capabilities: ['percentage-rollout', 'targeting-rules', 'snapshot-etag'],
       schemaVersion: this.db.schemaVersion,
@@ -109,7 +109,7 @@ export class FlagsApi {
     api.get('/environments', read, async (request) => ({ items: this.#visibleEnvs(request).map((e) => ({ env: e, version: this.flags.version(e) })) }));
 
     // ---- flags
-    api.post('/flags', { config: { audit: AuditClient.route('flags.flag.create', (_r, b) => ({ type: 'flag', id: b.flag.key })) }, ...write, schema: { body: Schemas.create } }, async (request, reply) => {
+    api.post('/flags', { config: { audit: AuditClient.route('atc-flags.flag.create', (_r, b) => ({ type: 'flag', id: b.flag.key })) }, ...write, schema: { body: Schemas.create } }, async (request, reply) => {
       const row = s.create(/** @type {any} */ (request.body), actor(request));
       reply.header('location', `/v1/flags/${row.key}`);
       return reply.code(201).send({ flag: full(request, row.key) });
@@ -124,12 +124,12 @@ export class FlagsApi {
 
     api.get('/flags/:key', { ...read, schema: { params: Schemas.keyParams } }, async (request) => ({ flag: full(request, key(request)) }));
 
-    api.patch('/flags/:key', { config: { audit: AuditClient.route('flags.flag.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ patch: r.body })) }, ...write, schema: { params: Schemas.keyParams, body: Schemas.patchFlag } }, async (request) => {
+    api.patch('/flags/:key', { config: { audit: AuditClient.route('atc-flags.flag.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ patch: r.body })) }, ...write, schema: { params: Schemas.keyParams, body: Schemas.patchFlag } }, async (request) => {
       s.update(key(request), /** @type {any} */ (request.body), actor(request));
       return { flag: full(request, key(request)) };
     });
 
-    api.delete('/flags/:key', { config: { audit: AuditClient.route('flags.flag.delete', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key })) }, ...write, schema: { params: Schemas.keyParams } }, async (request, reply) => {
+    api.delete('/flags/:key', { config: { audit: AuditClient.route('atc-flags.flag.delete', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key })) }, ...write, schema: { params: Schemas.keyParams } }, async (request, reply) => {
       if (request.apiKey.envs) throw new FlagError('FORBIDDEN', 'an environment-scoped key cannot delete flags');
       s.remove(key(request), actor(request));
       return reply.code(204).send();
@@ -145,11 +145,11 @@ export class FlagsApi {
     // ---- environment state
     api.get('/flags/:key/envs/:env', { ...read, schema: { params: Schemas.keyEnvParams } }, async (request) => ({ env: env(request), state: Views.env(s.envState(key(request), env(request))) }));
 
-    api.patch('/flags/:key/envs/:env', { config: { audit: AuditClient.route('flags.env.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, patch: r.body })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.patchEnv } }, async (request) => ({
+    api.patch('/flags/:key/envs/:env', { config: { audit: AuditClient.route('atc-flags.env.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, patch: r.body })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.patchEnv } }, async (request) => ({
       env: env(request), state: Views.env(s.updateEnv(key(request), env(request), /** @type {any} */ (request.body), actor(request))),
     }));
 
-    api.post('/flags/:key/envs/:env/copy', { config: { audit: AuditClient.route('flags.env.copy', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, ...(/** @type {object} */ (r.body ?? {})) })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.copyEnv } }, async (request) => {
+    api.post('/flags/:key/envs/:env/copy', { config: { audit: AuditClient.route('atc-flags.env.copy', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, ...(/** @type {object} */ (r.body ?? {})) })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.copyEnv } }, async (request) => {
       const to = /** @type {{ to: string }} */ (request.body).to;
       s.assertEnv(to);
       ApiKeyAuth.assertEnv(request.apiKey, to);

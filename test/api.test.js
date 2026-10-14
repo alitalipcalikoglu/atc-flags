@@ -16,7 +16,7 @@ test('API: probes, auth, roles and environment scoping', async (t) => {
   assert.equal(spec.body, readFileSync(new URL('../openapi.yaml', import.meta.url), 'utf8'));
   assert.match(String(spec.headers['content-type']), /^text\/yaml/);
   const info = json(await app.inject({ url: '/v1/info' }));
-  assert.equal(info.service, 'flags');
+  assert.equal(info.service, 'atc-flags');
   assert.equal(info.version, PACKAGE_VERSION);
   assert.equal(info.apiVersion, 'v1');
   assert.deepEqual(info.capabilities, ['percentage-rollout', 'targeting-rules', 'snapshot-etag']);

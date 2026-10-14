@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: flags
+  title: atc-flags
   version: "1.1.0"
   description: >
     Feature flags and typed settings per environment: on/off state, percentage rollouts with
@@ -34,7 +34,7 @@ tags:
 paths:
   /openapi.yaml:
     get:
-      operationId: flags.openapi
+      operationId: atc-flags.openapi
       summary: Download the canonical OpenAPI document
       description: Returns this service's repository-root OpenAPI 3.1 document byte-for-byte.
       security: []
@@ -47,7 +47,7 @@ paths:
 
   /health:
     get:
-      operationId: flags.health.get
+      operationId: atc-flags.health.get
       summary: Liveness probe
       description: Always `200`. Does not check any dependency.
       tags: [ops]
@@ -66,7 +66,7 @@ paths:
 
   /ready:
     get:
-      operationId: flags.ready.get
+      operationId: atc-flags.ready.get
       summary: Readiness probe
       description: Runs the database ping, cached for 10 seconds.
       tags: [ops]
@@ -95,7 +95,7 @@ paths:
 
   /v1/info:
     get:
-      operationId: flags.info.get
+      operationId: atc-flags.info.get
       summary: Service identity and capabilities
       tags: [ops]
       security: []
@@ -117,11 +117,11 @@ paths:
                     items: { type: string }
                     examples: [["percentage-rollout", "targeting-rules", "snapshot-etag"]]
                   schemaVersion: { type: integer, description: "SQLite PRAGMA user_version of the open database." }
-                  serviceCore: { type: string, description: "@atc-web/service-core version actually running." }
+                  serviceCore: { type: string, description: "@atc-web/atc-service-core version actually running." }
 
   /metrics:
     get:
-      operationId: flags.metrics.get
+      operationId: atc-flags.metrics.get
       summary: Prometheus text-format metrics
       description: Requires a `read`-capable API key. Not rate-limited (registered outside the `/v1` rate-limit hook).
       tags: [ops]
@@ -137,7 +137,7 @@ paths:
 
   /v1/environments:
     get:
-      operationId: flags.environments.list
+      operationId: atc-flags.environments.list
       summary: List environments visible to this key
       description: >
         Environments are configured via `FLAGS_ENVIRONMENTS`, intersected with the key's own
@@ -167,7 +167,7 @@ paths:
 
   /v1/flags:
     post:
-      operationId: flags.flags.create
+      operationId: atc-flags.flags.create
       summary: Create a flag
       description: >
         Creates the flag and seeds identical initial state in every configured environment
@@ -199,7 +199,7 @@ paths:
         "413": { $ref: "#/components/responses/ValueTooLarge" }
         "429": { $ref: "#/components/responses/RateLimited" }
     get:
-      operationId: flags.flags.list
+      operationId: atc-flags.flags.list
       summary: List flags
       description: Cursor-paginated. `cursor` must already be a valid flag key (schema-enforced), so a malformed cursor is rejected as `400 VALIDATION_FAILED`, not a domain error.
       tags: [flags]
@@ -245,7 +245,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/KeyParam"
     get:
-      operationId: flags.flags.get
+      operationId: atc-flags.flags.get
       summary: Get a flag
       tags: [flags]
       x-stack-visibility: authenticated
@@ -265,7 +265,7 @@ paths:
         "404": { $ref: "#/components/responses/FlagNotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
     patch:
-      operationId: flags.flags.patch
+      operationId: atc-flags.flags.patch
       summary: Patch flag metadata
       description: >
         Updates description/tags/archived/reshuffle only — environment state is changed through
@@ -295,7 +295,7 @@ paths:
         "404": { $ref: "#/components/responses/FlagNotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
     delete:
-      operationId: flags.flags.delete
+      operationId: atc-flags.flags.delete
       summary: Delete a flag
       description: >
         **Requires an unscoped API key** (`envs: null`) regardless of role: an environment-scoped
@@ -322,7 +322,7 @@ paths:
 
   /v1/flags/{key}/history:
     get:
-      operationId: flags.flags.getHistory
+      operationId: atc-flags.flags.getHistory
       summary: History for one flag
       tags: [history]
       x-stack-visibility: authenticated
@@ -340,7 +340,7 @@ paths:
 
   /v1/history:
     get:
-      operationId: flags.history.list
+      operationId: atc-flags.history.list
       summary: History across every flag
       tags: [history]
       x-stack-visibility: authenticated
@@ -359,7 +359,7 @@ paths:
       - $ref: "#/components/parameters/KeyParam"
       - $ref: "#/components/parameters/EnvParam"
     get:
-      operationId: flags.envs.get
+      operationId: atc-flags.envs.get
       summary: Get one flag's state in one environment
       description: Environment-scope-gated on `{env}` — a key scoped away from this environment gets `403 FORBIDDEN`.
       tags: [flags]
@@ -382,7 +382,7 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
       # UNKNOWN_ENV is also reachable here, folded into the shared FlagNotFound/UnknownEnv 404 pair below.
     patch:
-      operationId: flags.envs.patch
+      operationId: atc-flags.envs.patch
       summary: Patch one flag's state in one environment
       description: >
         Environment-scope-gated on `{env}`. Requires a `write`-capable key. `value`/`offValue` are
@@ -421,7 +421,7 @@ paths:
 
   /v1/flags/{key}/envs/{env}/copy:
     post:
-      operationId: flags.envs.copy
+      operationId: atc-flags.envs.copy
       summary: Copy one environment's state onto another
       description: >
         Copies `enabled`, `value`, `offValue`, `percentage` and `rules` from `{env}` (the path,
@@ -462,7 +462,7 @@ paths:
 
   /v1/evaluate:
     post:
-      operationId: flags.evaluate.post
+      operationId: atc-flags.evaluate.post
       summary: Evaluate flags for a context (JSON body)
       description: >
         Environment-scope-gated on the body's `env`. Evaluates every non-archived flag in `env`
@@ -486,7 +486,7 @@ paths:
         # env is validated before any flag lookup, so only UnknownEnv (404) applies, never FlagNotFound.
       x-unknown-env-response: "404 UNKNOWN_ENV — see components.responses.UnknownEnv"
     get:
-      operationId: flags.evaluate.get
+      operationId: atc-flags.evaluate.get
       summary: Evaluate flags for a context (query string)
       description: >
         Same behavior and response shapes as `POST /v1/evaluate`, expressed as query parameters.
@@ -537,7 +537,7 @@ paths:
 
   /v1/snapshot/{env}:
     get:
-      operationId: flags.snapshot.get
+      operationId: atc-flags.snapshot.get
       summary: Full rule set of an environment, for client-side evaluation
       description: >
         Environment-scope-gated on `{env}`. Returns every non-archived flag's complete evaluable
@@ -582,7 +582,7 @@ paths:
 
   /v1/stats:
     get:
-      operationId: flags.stats.get
+      operationId: atc-flags.stats.get
       summary: Aggregate counts
       tags: [stats]
       x-stack-visibility: authenticated

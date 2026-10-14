@@ -1,4 +1,4 @@
-import { readServiceVersion } from '@atc-web/service-core/fastify';
+import { readServiceVersion } from '@atc-web/atc-service-core/fastify';
 import { Config } from '../src/config.js';
 import { Database } from '../src/db.js';
 import { FlagService } from '../src/domain/flag-service.js';

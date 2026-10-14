@@ -75,7 +75,7 @@ export class LocalFlags {
 ```js
 const flags = new LocalFlags({ url: process.env.FLAGS_URL, apiKey: process.env.FLAGS_API_KEY, env: 'prod' });
 await flags.refresh();                       // once at startup; afterwards every 15 s with ETag
-flags.evaluate('checkout.new', { userId: user.id }) ?? false;
+atc-flags.evaluate('checkout.new', { userId: user.id }) ?? false;
 ```
 
 This is the same algorithm the service runs; the service's own tests pin it. If the service is down the client keeps the last snapshot, which is the intended failure mode.

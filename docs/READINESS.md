@@ -167,7 +167,7 @@ field on every log line.
 trust gate — per [OBSERVABILITY.md](../../stack/docs/OBSERVABILITY.md) this is an internal service
 reached only from gateway, console or peer services, never directly from an untrusted client) and
 generates one (`randomUUID()`) when absent. Also parses an inbound `traceparent` via
-`@atc-web/service-core`'s `registerRequestContext`, trust-gated on the same `TRUST_PROXY` flag:
+`@atc-web/atc-service-core`'s `registerRequestContext`, trust-gated on the same `TRUST_PROXY` flag:
 trusted, the caller's trace-id is continued with a fresh span-id; untrusted or malformed, a fresh
 trace is started. Both `traceId`/`spanId` are logged on every request line. `flags` makes no
 outbound HTTP calls in the request path (the audit call is asynchronous, off the request path, and

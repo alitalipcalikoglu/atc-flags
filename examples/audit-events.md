@@ -15,11 +15,11 @@ One event per completed write request, `outcome: "success"` for 2xx, `outcome: "
 
 | Action | Request |
 |---|---|
-| `flags.flag.create` | `POST /v1/flags` |
-| `flags.flag.update` | `PATCH /v1/flags/:key` |
-| `flags.flag.delete` | `DELETE /v1/flags/:key` |
-| `flags.env.update` | `PATCH /v1/flags/:key/envs/:env` |
-| `flags.env.copy` | `POST /v1/flags/:key/envs/:env/copy` |
+| `atc-flags.flag.create` | `POST /v1/flags` |
+| `atc-flags.flag.update` | `PATCH /v1/flags/:key` |
+| `atc-flags.flag.delete` | `DELETE /v1/flags/:key` |
+| `atc-flags.env.update` | `PATCH /v1/flags/:key/envs/:env` |
+| `atc-flags.env.copy` | `POST /v1/flags/:key/envs/:env/copy` |
 
 ## Event shape
 
@@ -27,7 +27,7 @@ One event per completed write request, `outcome: "success"` for 2xx, `outcome: "
 {
   "id": "0f1a…",
   "at": "2026-09-17T10:00:00.000Z",
-  "action": "flags.flag.create",
+  "action": "atc-flags.flag.create",
   "outcome": "success",
   "actor": { "type": "apikey", "id": "console" },
   "target": { "type": "…", "id": "…" },

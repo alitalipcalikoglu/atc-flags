@@ -1,4 +1,4 @@
-# flags
+# atc-flags
 
 Feature flags and typed settings for applications: one state per environment, on/off, percentage rollouts with stable per-user buckets, targeting rules on users, emails and attributes, change history, and cached snapshots for client-side evaluation. HTTP only.
 
@@ -124,7 +124,7 @@ Class-based; dependencies are injected through constructors, `src/application.js
 ## Out of scope by design
 
 - Multivariate experiments with metrics: a `string` flag serves the variant; measure in your analytics.
-- Scheduled changes ("enable at 09:00"): the [scheduler](https://github.com/alitalipcalikoglu/scheduler) service calls `PATCH …/envs/:env` at the right time; see its `examples/flags-scheduled-change.md`.
+- Scheduled changes ("enable at 09:00"): the [atc-scheduler](https://github.com/alitalipcalikoglu/atc-scheduler) service calls `PATCH …/envs/:env` at the right time; see its `examples/flags-scheduled-change.md`.
 - Webhooks on change: poll the snapshot with `If-None-Match`; one request every few seconds costs nothing.
 - Numeric or regex conditions in rules: bucket values into strings on the application side.
 - Per-flag permissions inside one environment: use separate environments or separate instances.
