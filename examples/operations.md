@@ -46,7 +46,7 @@ pm2 reload flags
 
 ```bash
 docker build -t atc-flags .
-docker run -d -p 3007:3007 -v flags-data:/data --env-file .env atc-flags
+docker run -d -p 3007:3007 -v atc-flags-data:/data --env-file .env atc-flags
 ```
 
 ## Logs

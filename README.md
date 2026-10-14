@@ -24,7 +24,7 @@ Production with Docker (mount the database directory):
 
 ```bash
 docker build -t atc-flags .
-docker run -p 3007:3007 -v flags-data:/data --env-file .env atc-flags
+docker run -p 3007:3007 -v atc-flags-data:/data --env-file .env atc-flags
 ```
 
 Tests and type check:
@@ -145,14 +145,14 @@ correct data but disagree with each other on stats — this topology is not test
 
 Requests are logged with `reqId` (accepts or generates `X-Request-Id`) and `traceId`/`spanId` (a
 trusted inbound `traceparent`, gated on `TRUST_PROXY`, continues the caller's trace with a fresh
-span-id for this hop; see [OBSERVABILITY.md](../stack/docs/OBSERVABILITY.md)). `/health` is a static check; `/ready` pings the database, cached for
+span-id for this hop; see [OBSERVABILITY.md](../atc-stack/docs/OBSERVABILITY.md)). `/health` is a static check; `/ready` pings the database, cached for
 10s, and never mutates state. See [docs/READINESS.md](docs/READINESS.md) for the full contract.
 
 ## Backup / restore
 
 The only state to protect is the SQLite file at `DB_PATH` (default `./data/flags.db`, plus its WAL
 sidecars while running) — configuration is environment variables, not data. Use `stack backup`/
-`stack restore` from the workspace root (see `stack/docs/UPGRADE.md`) to snapshot and restore this
+`stack restore` from the workspace root (see `atc-stack/docs/UPGRADE.md`) to snapshot and restore this
 consistently alongside the rest of the stack. On every start, before applying a pending migration
 to an existing database, the service itself also snapshots the file to
 `DB_PATH.pre-v<N>-<timestamp>` (directory overridable with `DB_BACKUP_DIR`) — a manual last resort

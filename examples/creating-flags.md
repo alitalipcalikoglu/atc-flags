@@ -8,11 +8,11 @@ fcurl -X POST $FLAGS/v1/flags -d '{"key":"checkout.new","kind":"boolean","descri
 {
   "flag": {
     "key": "checkout.new", "kind": "boolean", "description": "New checkout flow", "tags": ["checkout", "q4"], "archived": false,
-    "createdBy": "console", "createdAt": "2026-09-16T10:00:00.000Z", "updatedAt": "2026-09-16T10:00:00.000Z",
+    "createdBy": "atc-console", "createdAt": "2026-09-16T10:00:00.000Z", "updatedAt": "2026-09-16T10:00:00.000Z",
     "environments": {
-      "dev":     { "enabled": false, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 1, "updatedBy": "console", "updatedAt": "…" },
-      "prod":    { "enabled": false, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 1, "updatedBy": "console", "updatedAt": "…" },
-      "staging": { "enabled": false, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 1, "updatedBy": "console", "updatedAt": "…" }
+      "dev":     { "enabled": false, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 1, "updatedBy": "atc-console", "updatedAt": "…" },
+      "prod":    { "enabled": false, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 1, "updatedBy": "atc-console", "updatedAt": "…" },
+      "staging": { "enabled": false, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 1, "updatedBy": "atc-console", "updatedAt": "…" }
     }
   }
 }

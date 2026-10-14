@@ -109,7 +109,7 @@ paths:
                 type: object
                 required: [service, version, apiVersion, capabilities, schemaVersion, serviceCore]
                 properties:
-                  service: { type: string, const: flags }
+                  service: { type: string, const: atc-flags }
                   version: { type: string, description: "This service's own package.json semver." }
                   apiVersion: { type: string, const: v1 }
                   capabilities:

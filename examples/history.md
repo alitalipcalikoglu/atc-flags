@@ -9,10 +9,10 @@ fcurl "$FLAGS/v1/flags/checkout.new/history?limit=3"
 ```json
 {
   "items": [
-    { "id": 41, "key": "checkout.new", "env": "prod", "action": "env.update", "actor": "console",
+    { "id": 41, "key": "checkout.new", "env": "prod", "action": "env.update", "actor": "atc-console",
       "before": { "enabled": true, "value": true, "offValue": false, "percentage": 10, "rules": [] },
       "after":  { "enabled": true, "value": true, "offValue": false, "percentage": 50, "rules": [] }, "at": "2026-09-16T12:00:00.000Z" },
-    { "id": 38, "key": "checkout.new", "env": "prod", "action": "env.copy", "actor": "console", "before": { "…": "…" }, "after": { "from": "staging", "…": "…" }, "at": "…" },
+    { "id": 38, "key": "checkout.new", "env": "prod", "action": "env.copy", "actor": "atc-console", "before": { "…": "…" }, "after": { "from": "staging", "…": "…" }, "at": "…" },
     { "id": 12, "key": "checkout.new", "env": null, "action": "flag.create", "actor": "deployer", "before": null, "after": { "kind": "boolean", "…": "…" }, "at": "…" }
   ],
   "nextBefore": "12"

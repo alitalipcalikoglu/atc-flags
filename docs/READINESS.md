@@ -1,14 +1,14 @@
-# `flags` readiness contract
+# `atc-flags` readiness contract
 
 ## Purpose
-`flags` lets the rest of the platform gate and tune behaviour without a deploy: it stores feature
+`atc-flags` lets the rest of the platform gate and tune behaviour without a deploy: it stores feature
 flags and typed settings (boolean, string, number, json), one state per environment (`dev`,
 `staging`, `prod` by default), and serves evaluation (per-request), snapshots (for client-side
 evaluation with polling + `ETag`), percentage rollouts with stable per-user buckets, targeting
 rules on user id / email / attributes, and a full change history.
 
 ## Dependencies
-- `audit` (`AUDIT_URL` + `AUDIT_API_KEY`): optional, both-or-neither. When unset, every write
+- `atc-audit` (`AUDIT_URL` + `AUDIT_API_KEY`): optional, both-or-neither. When unset, every write
   request still succeeds — the `AuditClient.hook` `onSend` hook checks `client?.enabled` and is a
   no-op when there is no target. When set, every successful (or 403-denied) write on a route
   carrying `config.audit` is queued in memory (`AuditClient.record`) and flushed in the background
@@ -18,7 +18,7 @@ rules on user id / email / attributes, and a full change history.
   (`MAX_BUFFER = 5_000`, oldest dropped with a warning once full) and are lost on process restart —
   there is no on-disk queue.
 
-No other service or external system is called by `flags`.
+No other service or external system is called by `atc-flags`.
 
 ## Persistence
 Engine: SQLite via `node:sqlite`'s `DatabaseSync` (`src/db.js`), WAL journal mode, `synchronous =
@@ -26,7 +26,7 @@ NORMAL`, `busy_timeout = 5000`, foreign keys on. File location: `DB_PATH`, defau
 `./data/flags.db` (Docker image sets `/data/flags.db` with `/data` as a declared volume).
 
 Schema (one migration block today, `Database.MIGRATIONS[0]`):
-- `flags` — one row per flag key: `key` (PK), `kind`, `description`, `tags` (JSON array), `archived`,
+- `atc-flags` — one row per flag key: `key` (PK), `kind`, `description`, `tags` (JSON array), `archived`,
   `rollout_salt`, `created_by`, `created_at`, `updated_at`.
 - `flag_envs` — one row per (flag, environment): `key`, `env`, `enabled`, `value`, `off_value`,
   `percentage`, `rules` (JSON), `version`, `updated_by`, `updated_at`; PK `(key, env)`; index
@@ -119,7 +119,7 @@ rather than being retried immediately. Logic lives entirely in `src/net/audit-cl
 - `GET /v1/evaluate`, `POST /v1/evaluate`, `GET /v1/snapshot/:env`, `GET /v1/flags*`, `GET
   /v1/history*` are naturally idempotent — read-only.
 - Audit events carry a locally generated `id` (`randomUUID()`) per event, but that id's use for
-  dedup is entirely up to the audit service's own implementation — `flags` does not verify or rely
+  dedup is entirely up to the audit service's own implementation — `atc-flags` does not verify or rely
   on the audit service deduplicating retried/duplicate batches.
 
 ## Backup
@@ -135,7 +135,7 @@ Stop the service, replace `DB_PATH` (and remove any stale `-wal`/`-shm` sidecars
 if present) with the backup copy, start the service. On start, `#migrate()` runs any migrations
 newer than the backup's stored `user_version`, so restoring an older backup onto a newer code
 version applies forward migrations automatically; there is no down-migration path if that's not
-wanted. No ordering constraint with other services' data — `flags` history and state are entirely
+wanted. No ordering constraint with other services' data — `atc-flags` history and state are entirely
 self-contained (flag keys are opaque strings to the rest of the platform, not foreign keys into
 another service's data).
 
@@ -153,7 +153,7 @@ another service's data).
 ## Logging
 Fastify's default request logger is active (`requestIdHeader: 'x-request-id'`, `genReqId:
 randomUUID`), so every log line carries `reqId` per the vocabulary in
-[OBSERVABILITY.md](../../stack/docs/OBSERVABILITY.md), and `req.headers.authorization` is redacted.
+[OBSERVABILITY.md](../../atc-stack/docs/OBSERVABILITY.md), and `req.headers.authorization` is redacted.
 Fields this service does **not** yet emit: `traceId`, `spanId`, `route`/`op` (Fastify logs the raw
 `req.url`, not a normalised operation name), `durationMs` (Fastify's default field is
 `responseTime`, same idea, different name), `upstream`/`upstreamMs` (flags makes no proxied
@@ -163,13 +163,13 @@ object passed to `request.log.error({ err }, 'unhandled error')` — it is not a
 field on every log line.
 
 ## Tracing
-`flags` accepts whatever `X-Request-Id` its caller sends (`requestIdHeader: 'x-request-id'`, no
-trust gate — per [OBSERVABILITY.md](../../stack/docs/OBSERVABILITY.md) this is an internal service
+`atc-flags` accepts whatever `X-Request-Id` its caller sends (`requestIdHeader: 'x-request-id'`, no
+trust gate — per [OBSERVABILITY.md](../../atc-stack/docs/OBSERVABILITY.md) this is an internal service
 reached only from gateway, console or peer services, never directly from an untrusted client) and
 generates one (`randomUUID()`) when absent. Also parses an inbound `traceparent` via
 `@atc-web/atc-service-core`'s `registerRequestContext`, trust-gated on the same `TRUST_PROXY` flag:
 trusted, the caller's trace-id is continued with a fresh span-id; untrusted or malformed, a fresh
-trace is started. Both `traceId`/`spanId` are logged on every request line. `flags` makes no
+trace is started. Both `traceId`/`spanId` are logged on every request line. `atc-flags` makes no
 outbound HTTP calls in the request path (the audit call is asynchronous, off the request path, and
 does not forward any request-scoped header) so there is nothing to propagate onward today either
 way.
@@ -186,8 +186,8 @@ means editing `FLAGS_API_KEYS` and restarting the process — there is no live k
 expiry, no multiple-active-secrets-per-id overlap window. At the boundary: request bodies are
 schema-validated (Fastify + ajv, `removeAdditional: false` so unknown fields are rejected rather
 than silently stripped), values/rules are checked against the flag's declared `kind` and size caps.
-Out of scope: authenticating end users of the application calling `flags` (that's the caller's
-job — `flags` only authenticates the calling service/key), TLS certificate rotation (manual: replace
+Out of scope: authenticating end users of the application calling `atc-flags` (that's the caller's
+job — `atc-flags` only authenticates the calling service/key), TLS certificate rotation (manual: replace
 `TLS_CERT_PATH`/`TLS_KEY_PATH` files and restart).
 
 ## Scaling model
@@ -202,7 +202,7 @@ different `/v1/stats` and `/metrics` numbers, and there is no cross-process cach
 beyond each process's own `env_versions` polling.
 
 ## Single-node / multi-node guarantees
-Running more than one `flags` instance against the same `DB_PATH` today is unsupported and
+Running more than one `atc-flags` instance against the same `DB_PATH` today is unsupported and
 untested: writes themselves would likely stay consistent (SQLite's own locking), but each instance
 would serve its own independent evaluation cache and its own independent `evaluations`/`/metrics`
 counters, so two instances behind a load balancer would show different stats and could momentarily

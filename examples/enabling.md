@@ -7,7 +7,7 @@ fcurl -X PATCH $FLAGS/v1/flags/checkout.new/envs/staging -d '{"enabled":true}'
 ```
 
 ```json
-{ "env": "staging", "state": { "enabled": true, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 2, "updatedBy": "console", "updatedAt": "…" } }
+{ "env": "staging", "state": { "enabled": true, "value": true, "offValue": false, "percentage": 100, "rules": [], "version": 2, "updatedBy": "atc-console", "updatedAt": "…" } }
 ```
 
 From this moment `GET /v1/evaluate?env=staging` returns `"checkout.new": true`; `prod` still returns `false`.
