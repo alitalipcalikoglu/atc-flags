@@ -6,7 +6,7 @@ test('two-person rule: prod changes wait for another person; self-approval, stal
   const { app } = await buildApp({ PROTECTED_ENVS: 'prod', ACTOR_KEYS: 'console' });
   t.after(() => app.close());
   const as = (/** @type {string} */ person) => ({ ...bearer(RW_KEY), 'x-actor': person, 'content-type': 'application/json' });
-  const call = (/** @type {string} */ method, /** @type {string} */ url, /** @type {any} */ payload, person = 'ada') => app.inject({ method: /** @type {any} */ (method), url, payload, headers: as(person) });
+  const call = (/** @type {string} */ method, /** @type {string} */ url, /** @type {any} */ payload = undefined, person = 'ada') => app.inject({ method: /** @type {any} */ (method), url, payload, headers: as(person) });
   assert.equal((await call('POST', '/v1/flags', { key: 'checkout.new', kind: 'boolean' })).statusCode, 201);
   // staging is not protected: applied at once
   assert.equal((await call('PATCH', '/v1/flags/checkout.new/envs/staging', { enabled: true })).statusCode, 200);
