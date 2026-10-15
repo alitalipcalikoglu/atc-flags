@@ -56,5 +56,24 @@ export class Database extends CoreDatabase {
     CREATE INDEX history_key ON history (key, id DESC);
     CREATE INDEX history_at ON history (at);
     `,
+    `
+    -- Two-person rule: a change to a protected environment waits here until a different person approves it.
+    CREATE TABLE changes (
+      id            TEXT PRIMARY KEY,
+      flag_key      TEXT NOT NULL,
+      env           TEXT NOT NULL,
+      kind          TEXT NOT NULL CHECK (kind IN ('update', 'copy')),
+      payload       TEXT NOT NULL,
+      base_updated  INTEGER NOT NULL,
+      status        TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      requested_by  TEXT NOT NULL,
+      requested_at  INTEGER NOT NULL,
+      decided_by    TEXT,
+      decided_at    INTEGER,
+      note          TEXT
+    );
+    CREATE INDEX changes_status ON changes (status, requested_at DESC);
+    CREATE INDEX changes_flag ON changes (flag_key, requested_at DESC);
+    `,
   ];
 }

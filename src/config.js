@@ -28,6 +28,8 @@ export class Config {
     this.rateLimitMax = v.rateLimitMax;
     this.historyRetentionDays = v.historyRetentionDays;
     this.maxValueBytes = v.maxValueBytes;
+    this.protectedEnvs = v.protectedEnvs;
+    this.actorKeys = v.actorKeys;
     Object.freeze(this);
   }
 
@@ -60,7 +62,15 @@ export class Config {
       rateLimitMax: r.integer('RATE_LIMIT_MAX', 1_200, { min: 1 }),
       historyRetentionDays: r.integer('HISTORY_RETENTION_DAYS', 365, { min: 1 }),
       maxValueBytes: r.integer('MAX_VALUE_BYTES', 16_384, { min: 64 }),
+      protectedEnvs: Config.#subset(r.list('PROTECTED_ENVS'), environments, 'PROTECTED_ENVS'),
+      actorKeys: r.list('ACTOR_KEYS'),
     });
+  }
+
+  /** @param {string[]} list @param {string[]} environments @param {string} name */
+  static #subset(list, environments, name) {
+    for (const e of list) if (!environments.includes(e)) throw new ConfigError(`${name} names "${e}", which is not in FLAGS_ENVIRONMENTS`);
+    return [...new Set(list)];
   }
 
   /** @param {string} raw */

@@ -30,6 +30,8 @@
  * @property {number} rateLimitMax
  * @property {number} historyRetentionDays
  * @property {number} maxValueBytes
+ * @property {string[]} protectedEnvs  Environments where every change needs a second person's approval.
+ * @property {string[]} actorKeys      Keys whose X-Actor header names the person acting (the console).
  */
 
 /** @typedef {import('./config.js').Config} Config */

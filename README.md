@@ -66,6 +66,8 @@ Errors are JSON: `{ "error": { "code", "message", "details?" } }`.
 | GET | `/v1/flags/:key/history`, `/v1/history` | read | Changes, newest first (`limit`, `before`). |
 | GET / PATCH | `/v1/flags/:key/envs/:env` | read / write | One environment's state; `{ enabled?, value?, offValue?, percentage?, rules? }`. |
 | POST | `/v1/flags/:key/envs/:env/copy` | write | `{ to }`: copy the state to another environment. |
+| GET | `/v1/changes` | read | Change requests of protected environments (`status`, `key`) |
+| POST | `/v1/changes/:id/approve`, `/v1/changes/:id/reject` | write | Apply as a second person; turn down or withdraw (`{ note? }`) |
 | GET | `/v1/evaluate` | read | `env`, `userId`, `email`, `attrs.<name>`, `keys` (comma list), `details` → `{ env, version, flags }`. |
 | POST | `/v1/evaluate` | read | `{ env, context?, keys?, details? }`, same result. |
 | GET | `/v1/snapshot/:env` | read | Full rule set with `ETag` for local evaluation; `304` on `If-None-Match`. |
@@ -99,6 +101,7 @@ All settings come from environment variables and are validated at startup. See [
 ## Security notes
 
 - API keys compared in constant time; per-key rate limit; read/write roles; environment scoping enforced on every endpoint that names an environment, including what a flag object reveals.
+- Two-person rule: in `PROTECTED_ENVS` (e.g. `prod`) a state change or a copy onto it is stored as a request (`202`); a different actor approves it, and a request whose environment changed meanwhile is closed as stale. Actors are API key ids, or `<key>/<person>` for keys in `ACTOR_KEYS` that send `X-Actor` (the console). Creating, archiving and deleting flags are not gated.
 - Values are validated against the flag's kind and capped at `MAX_VALUE_BYTES`; rule lists are bounded; unknown fields rejected; bodies capped at `BODY_LIMIT`.
 - No secrets belong here: every read key can see every value in its environments. Settings are configuration, not credentials.
 - Every write is attributed to the key that made it and kept in history.

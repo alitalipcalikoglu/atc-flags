@@ -20,6 +20,8 @@ One event per completed write request, `outcome: "success"` for 2xx, `outcome: "
 | `atc-flags.flag.delete` | `DELETE /v1/flags/:key` |
 | `atc-flags.env.update` | `PATCH /v1/flags/:key/envs/:env` |
 | `atc-flags.env.copy` | `POST /v1/flags/:key/envs/:env/copy` |
+| `atc-flags.change.approve` | `POST /v1/changes/:id/approve` |
+| `atc-flags.change.reject` | `POST /v1/changes/:id/reject` |
 
 ## Event shape
 

@@ -146,6 +146,17 @@ export class FlagService {
   }
 
   /**
+   * Check an environment patch without applying it (for change requests).
+   * @param {string} key @param {{ value?: unknown, offValue?: unknown, rules?: unknown }} patch
+   */
+  validateEnvPatch(key, patch) {
+    const flag = this.get(key);
+    if (patch.value !== undefined) this.check.value(flag.kind, patch.value, 'value');
+    if (patch.offValue !== undefined) this.check.value(flag.kind, patch.offValue, 'offValue');
+    if (patch.rules !== undefined) this.check.rules(flag.kind, patch.rules);
+  }
+
+  /**
    * Partial update of one environment's state; every given field is validated against the kind.
    * @param {string} key
    * @param {string} env

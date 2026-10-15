@@ -27,6 +27,7 @@ tags:
   - name: environments
   - name: flags
   - name: history
+  - name: changes
   - name: evaluate
   - name: snapshot
   - name: stats
@@ -338,6 +339,62 @@ paths:
         "404": { $ref: "#/components/responses/FlagNotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/changes:
+    get:
+      operationId: atc-flags.changes.list
+      summary: Change requests of protected environments
+      description: Newest first, only environments the key may see. Also returns the protected environments.
+      tags: [changes]
+      x-stack-visibility: authenticated
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: key, in: query, required: false, schema: { $ref: "#/components/schemas/FlagKey" } }
+        - { name: limit, in: query, required: false, schema: { type: string, pattern: "^([1-9]|[1-9][0-9]|100)$" } }
+      responses:
+        "200":
+          description: Requests.
+          content:
+            application/json:
+              schema: { type: object, required: [items, protectedEnvs], properties: { items: { type: array, items: { $ref: "#/components/schemas/Change" } }, protectedEnvs: { type: array, items: { type: string } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/changes/{id}/approve:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{12}$" } }]
+    post:
+      operationId: atc-flags.changes.approve
+      summary: Approve and apply a change request
+      description: Needs a write key and a different actor than the requester (the console names the person in X-Actor; ACTOR_KEYS). A request whose environment changed after it was made is closed as stale (`409 CHANGE_STALE`).
+      tags: [changes]
+      x-stack-visibility: authenticated
+      responses:
+        "200":
+          description: Applied.
+          content:
+            application/json:
+              schema: { type: object, properties: { change: { $ref: "#/components/schemas/Change" }, env: { type: string }, state: { $ref: "#/components/schemas/EnvironmentState" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: "`FORBIDDEN` or `SELF_APPROVAL`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: "`CHANGE_NOT_FOUND`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "409": { description: "`CHANGE_CLOSED` or `CHANGE_STALE`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/changes/{id}/reject:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{12}$" } }]
+    post:
+      operationId: atc-flags.changes.reject
+      summary: Reject a change request (or withdraw your own)
+      tags: [changes]
+      x-stack-visibility: authenticated
+      requestBody: { required: false, content: { application/json: { schema: { type: object, additionalProperties: false, properties: { note: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: Rejected., content: { application/json: { schema: { type: object, properties: { change: { $ref: "#/components/schemas/Change" } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: "`CHANGE_NOT_FOUND`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "409": { description: "`CHANGE_CLOSED`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/history:
     get:
       operationId: atc-flags.history.list
@@ -389,7 +446,9 @@ paths:
         validated against the flag's `kind`; `rules` are validated and normalized by the domain
         layer (ids deduplicated-checked, emails lower-cased, list sizes bounded) — this is why
         `INVALID_RULE` is reachable even though the wire-level JSON Schema for `rules` only checks
-        "array, at most 100 items".
+        "array, at most 100 items". In a protected environment (`PROTECTED_ENVS`) nothing is applied:
+        the validated patch becomes a change request (`202`) that a different person approves
+        (`POST /v1/changes/{id}/approve`).
       tags: [flags]
       x-stack-visibility: authenticated
       requestBody:
@@ -408,6 +467,11 @@ paths:
                 properties:
                   env: { type: string }
                   state: { $ref: "#/components/schemas/EnvironmentState" }
+        "202":
+          description: Protected environment — a change request was stored; nothing changed yet.
+          content:
+            application/json:
+              schema: { type: object, required: [change], properties: { change: { $ref: "#/components/schemas/Change" } } }
         "400":
           description: One of `VALIDATION_FAILED` (malformed request shape), `INVALID_VALUE` (`value`/`offValue` does not match the flag's `kind`), or `INVALID_RULE` (a `rules` entry fails validation).
           content:
@@ -427,7 +491,8 @@ paths:
         Copies `enabled`, `value`, `offValue`, `percentage` and `rules` from `{env}` (the path,
         source) onto `to` (the body, destination) for the same flag. Both `{env}` and `to` are
         environment-scope-gated independently — a key must have access to both, or it gets
-        `403 FORBIDDEN`. Requires a `write`-capable key.
+        `403 FORBIDDEN`. Requires a `write`-capable key. A copy onto a protected environment becomes a
+        change request (`202`).
       tags: [flags]
       x-stack-visibility: authenticated
       parameters:
@@ -454,6 +519,11 @@ paths:
                 properties:
                   env: { type: string, description: "Equal to `to` from the request body." }
                   state: { $ref: "#/components/schemas/EnvironmentState" }
+        "202":
+          description: Protected destination — a change request was stored.
+          content:
+            application/json:
+              schema: { type: object, required: [change], properties: { change: { $ref: "#/components/schemas/Change" } } }
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -730,6 +800,20 @@ components:
             message: { type: string }
             details: { description: "Present on some errors; shape varies by code." }
 
+    Change:
+      type: object
+      properties:
+        id: { type: string }
+        key: { type: string }
+        env: { type: string }
+        kind: { type: string, enum: [update, copy] }
+        payload: { type: object, description: "The environment patch, or `{ from }` for a copy." }
+        status: { type: string, enum: [pending, approved, rejected] }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        decidedBy: { type: [string, "null"] }
+        decidedAt: { type: [string, "null"], format: date-time }
+        note: { type: [string, "null"] }
     FlagKey:
       type: string
       pattern: '^[a-z0-9]+([.\-_][a-z0-9]+)*$'

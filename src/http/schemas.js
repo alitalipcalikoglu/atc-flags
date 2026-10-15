@@ -37,6 +37,9 @@ export class Schemas {
     },
   };
 
+  static changeParams = { type: 'object', properties: { id: { type: 'string', pattern: '^chg_[0-9a-z]{6,12}[0-9a-f]{12}$' } }, required: ['id'] };
+  static changesQuery = { type: 'object', additionalProperties: false, properties: { status: { type: 'string', enum: ['pending', 'approved', 'rejected'] }, key: Schemas.key, limit: { type: 'string', pattern: '^([1-9]|[1-9][0-9]|100)$' } } };
+  static rejectChange = { type: ['object', 'null'], additionalProperties: false, properties: { note: { type: 'string', maxLength: 500 } } };
   static historyQuery = { type: 'object', additionalProperties: false, properties: { limit: { type: 'string', pattern: '^([1-9]|[1-9][0-9]|100)$' }, before: { type: 'string', pattern: '^[0-9]{1,15}$' } } };
 
   static context = {

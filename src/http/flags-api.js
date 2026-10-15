@@ -5,6 +5,7 @@ import { AuditClient } from '@atc-web/atc-service-core/audit';
 import { createErrorHandler, registerInfo, registerOpenApi, registerProbes, registerRequestContext, requestOptions } from '@atc-web/atc-service-core/fastify';
 import { FlagError } from '../domain/errors.js';
 import { ApiKeyAuth } from './api-key-auth.js';
+import { ChangeRequests } from '../domain/change-requests.js';
 import { Schemas } from './schemas.js';
 import { Views } from './views.js';
 import { AuditMetrics } from '../audit-metrics.js';
@@ -46,6 +47,7 @@ export class FlagsApi {
     this.version = version;
     this.logger = logger;
     this.auth = new ApiKeyAuth(config.apiKeys);
+    this.changes = new ChangeRequests({ db, service, protectedEnvs: config.protectedEnvs });
   }
 
   /** @returns {Promise<FastifyInstance>} */
@@ -106,7 +108,11 @@ export class FlagsApi {
     const write = { preHandler: ApiKeyAuth.require('write') };
     const key = (/** @type {FastifyRequest} */ r) => /** @type {{ key: string }} */ (r.params).key;
     const env = (/** @type {FastifyRequest} */ r) => { const e = /** @type {{ env: string }} */ (r.params).env; s.assertEnv(e); ApiKeyAuth.assertEnv(r.apiKey, e); return e; };
-    const actor = (/** @type {FastifyRequest} */ r) => r.apiKey.id;
+    // A key in ACTOR_KEYS (the console) names the person acting in X-Actor; the two-person rule compares these.
+    const actor = (/** @type {FastifyRequest} */ r) => {
+      const named = r.headers['x-actor'];
+      return this.config.actorKeys.includes(r.apiKey.id) && typeof named === 'string' && /^[A-Za-z0-9._@-]{1,64}$/.test(named) ? `${r.apiKey.id}/${named}` : r.apiKey.id;
+    };
     const full = (/** @type {FastifyRequest} */ r, /** @type {string} */ k) => Views.flag(s.get(k), this.flags.envsOf(k).filter((e) => this.#visibleEnvs(r).includes(e.env)));
 
     api.get('/environments', read, async (request) => ({ items: this.#visibleEnvs(request).map((e) => ({ env: e, version: this.flags.version(e) })) }));
@@ -148,15 +154,34 @@ export class FlagsApi {
     // ---- environment state
     api.get('/flags/:key/envs/:env', { ...read, schema: { params: Schemas.keyEnvParams } }, async (request) => ({ env: env(request), state: Views.env(s.envState(key(request), env(request))) }));
 
-    api.patch('/flags/:key/envs/:env', { config: { audit: AuditClient.route('atc-flags.env.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, patch: r.body })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.patchEnv } }, async (request) => ({
-      env: env(request), state: Views.env(s.updateEnv(key(request), env(request), /** @type {any} */ (request.body), actor(request))),
-    }));
+    api.patch('/flags/:key/envs/:env', { config: { audit: AuditClient.route('atc-flags.env.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, patch: r.body })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.patchEnv } }, async (request, reply) => {
+      const e = env(request);
+      if (this.changes.isProtected(e)) return reply.code(202).send({ change: Views.change(this.changes.request(key(request), e, 'update', /** @type {any} */ (request.body), actor(request))) });
+      return { env: e, state: Views.env(s.updateEnv(key(request), e, /** @type {any} */ (request.body), actor(request))) };
+    });
 
-    api.post('/flags/:key/envs/:env/copy', { config: { audit: AuditClient.route('atc-flags.env.copy', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, ...(/** @type {object} */ (r.body ?? {})) })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.copyEnv } }, async (request) => {
+    api.post('/flags/:key/envs/:env/copy', { config: { audit: AuditClient.route('atc-flags.env.copy', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, ...(/** @type {object} */ (r.body ?? {})) })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.copyEnv } }, async (request, reply) => {
       const to = /** @type {{ to: string }} */ (request.body).to;
       s.assertEnv(to);
       ApiKeyAuth.assertEnv(request.apiKey, to);
+      if (this.changes.isProtected(to)) return reply.code(202).send({ change: Views.change(this.changes.request(key(request), to, 'copy', { from: env(request) }, actor(request))) });
       return { env: to, state: Views.env(s.copyEnv(key(request), env(request), to, actor(request))) };
+    });
+
+    // ---- change requests (two-person rule on PROTECTED_ENVS)
+    api.get('/changes', { ...read, schema: { querystring: Schemas.changesQuery } }, async (request) => {
+      const q = /** @type {{ status?: any, key?: string, limit?: string }} */ (request.query);
+      return { items: this.changes.list({ status: q.status, key: q.key, envs: request.apiKey.envs ?? null, limit: q.limit ? Number(q.limit) : 50 }).map(Views.change), protectedEnvs: this.config.protectedEnvs };
+    });
+    const change = (/** @type {FastifyRequest} */ r) => { const c = this.changes.get(/** @type {{ id: string }} */ (r.params).id); ApiKeyAuth.assertEnv(r.apiKey, c.env); return c; };
+    api.post('/changes/:id/approve', { config: { audit: AuditClient.route('atc-flags.change.approve', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams } }, async (request) => {
+      const c = change(request);
+      const r = this.changes.approve(c.id, actor(request));
+      return { change: Views.change(r.change), env: c.env, state: Views.env(r.state) };
+    });
+    api.post('/changes/:id/reject', { config: { audit: AuditClient.route('atc-flags.change.reject', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams, body: Schemas.rejectChange } }, async (request) => {
+      const c = change(request);
+      return { change: Views.change(this.changes.reject(c.id, actor(request), /** @type {{ note?: string }} */ (request.body ?? {}).note ?? null)) };
     });
 
     // ---- evaluation
