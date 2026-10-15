@@ -64,7 +64,7 @@ export class Database extends CoreDatabase {
       env           TEXT NOT NULL,
       kind          TEXT NOT NULL CHECK (kind IN ('update', 'copy')),
       payload       TEXT NOT NULL,
-      base_updated  INTEGER NOT NULL,
+      base_updated  INTEGER NOT NULL,  -- version of the environment state when requested
       status        TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
       requested_by  TEXT NOT NULL,
       requested_at  INTEGER NOT NULL,

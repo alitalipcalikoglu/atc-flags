@@ -37,4 +37,26 @@ test('two-person rule: prod changes wait for another person; self-approval, stal
   assert.deepEqual([res.json().items.length, res.json().protectedEnvs], [0, ['prod']]);
   const history = (await call('GET', '/v1/flags/checkout.new/history')).json().items.map((/** @type {any} */ h) => h.action);
   assert.ok(history.includes('change.requested') && history.includes('change.rejected'));
+
+  // a copy applies the source as it was requested; a source changed after the request makes it stale
+  await call('PATCH', '/v1/flags/checkout.new/envs/staging', { percentage: 30 });
+  const snap = (await call('POST', '/v1/flags/checkout.new/envs/staging/copy', { to: 'prod' })).json().change;
+  assert.deepEqual([snap.payload.from, snap.payload.state.percentage], ['staging', 30]);
+  await call('PATCH', '/v1/flags/checkout.new/envs/staging', { percentage: 90 });
+  res = await call('POST', `/v1/changes/${snap.id}/approve`, {}, 'grace');
+  assert.deepEqual([res.statusCode, res.json().error.code], [409, 'CHANGE_STALE'], 'the source changed after the request');
+  assert.notEqual((await call('GET', '/v1/flags/checkout.new/envs/prod')).json().state.percentage, 90, 'the unreviewed source state was not applied');
+  const ok = (await call('POST', '/v1/flags/checkout.new/envs/staging/copy', { to: 'prod' })).json().change;
+  res = await call('POST', `/v1/changes/${ok.id}/approve`, {}, 'grace');
+  assert.deepEqual([res.statusCode, res.json().state.percentage], [200, 90], 'an unchanged source is applied as snapshotted');
+});
+
+test('two-person rule: the approver needs access to the source environment of a copy', async (t) => {
+  const { app } = await buildApp({ PROTECTED_ENVS: 'prod', ACTOR_KEYS: 'console', FLAGS_API_KEYS: `console:${RW_KEY},prodonly:${'q'.repeat(40)}:readwrite:prod` });
+  t.after(() => app.close());
+  const h = { ...bearer(RW_KEY), 'x-actor': 'ada', 'content-type': 'application/json' };
+  await app.inject({ method: 'POST', url: '/v1/flags', payload: { key: 'f.one', kind: 'boolean' }, headers: h });
+  const c = (await app.inject({ method: 'POST', url: '/v1/flags/f.one/envs/staging/copy', payload: { to: 'prod' }, headers: h })).json().change;
+  const res = await app.inject({ method: 'POST', url: `/v1/changes/${c.id}/approve`, headers: bearer('q'.repeat(40)) });
+  assert.equal(res.statusCode, 403, 'a key scoped to prod alone cannot approve a copy from staging');
 });

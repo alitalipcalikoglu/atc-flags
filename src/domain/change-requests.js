@@ -10,8 +10,8 @@ import { FlagService } from './flag-service.js';
  * @property {string} flag_key
  * @property {string} env
  * @property {'update'|'copy'} kind
- * @property {string} payload        JSON: the env patch, or `{ from }` for a copy.
- * @property {number} base_updated   updated_at of the environment state when the change was requested.
+ * @property {string} payload        JSON: the env patch; for a copy `{ from, fromVersion, state }`, the source as it was when requested.
+ * @property {number} base_updated   version of the environment state when the change was requested (any change bumps it).
  * @property {'pending'|'approved'|'rejected'} status
  * @property {string} requested_by
  * @property {number} requested_at
@@ -54,10 +54,14 @@ export class ChangeRequests {
   request(key, env, kind, payload, actor, now = Date.now()) {
     const row = this.service.envState(key, env);
     if (kind === 'update') this.service.validateEnvPatch(key, /** @type {any} */ (payload));
-    else this.service.envState(key, /** @type {string} */ (payload.from));
+    else {
+      // A copy is reviewed as the source looked now: the snapshot is what gets applied, never the source at approval time.
+      const src = this.service.envState(key, /** @type {string} */ (payload.from));
+      payload = { from: payload.from, fromVersion: Number(src.version), state: FlagService.state(src) };
+    }
     const id = `chg_${now.toString(36)}${randomBytes(6).toString('hex')}`;
     this.db.transaction(() => {
-      this.stmt.insert.run(id, key, env, kind, JSON.stringify(payload), row.updated_at, actor, now);
+      this.stmt.insert.run(id, key, env, kind, JSON.stringify(payload), Number(row.version), actor, now);
       this.service.history.record({ key, env, action: 'change.requested', actor, before: FlagService.state(row), after: { change: id, kind, ...payload } }, now);
     });
     return this.get(id);
@@ -78,13 +82,14 @@ export class ChangeRequests {
     const c = this.#pending(id);
     if (c.requested_by === actor) throw new FlagError('SELF_APPROVAL', 'a change needs the approval of someone other than its requester');
     const current = this.service.envState(c.flag_key, c.env);
-    if (current.updated_at !== c.base_updated) {
-      this.stmt.decide.run('rejected', actor, now, 'stale: the environment changed after the request', id);
-      throw new FlagError('CHANGE_STALE', 'the environment changed after this request; it was closed, request the change again');
-    }
     const payload = JSON.parse(c.payload);
+    const sourceMoved = c.kind === 'copy' && Number(this.service.envState(c.flag_key, payload.from).version) !== payload.fromVersion;
+    if (Number(current.version) !== c.base_updated || sourceMoved) {
+      this.stmt.decide.run('rejected', actor, now, 'stale: the environment changed after the request', id);
+      throw new FlagError('CHANGE_STALE', `the ${sourceMoved ? 'source ' : ''}environment changed after this request; it was closed, request the change again`);
+    }
     const by = `${actor} (approved ${c.id} by ${c.requested_by})`;
-    const state = c.kind === 'update' ? this.service.updateEnv(c.flag_key, c.env, payload, by, now) : this.service.copyEnv(c.flag_key, payload.from, c.env, by, now);
+    const state = this.service.updateEnv(c.flag_key, c.env, c.kind === 'update' ? payload : payload.state, by, now);
     this.stmt.decide.run('approved', actor, now, null, id);
     return { change: this.get(id), state };
   }

@@ -807,7 +807,7 @@ components:
         key: { type: string }
         env: { type: string }
         kind: { type: string, enum: [update, copy] }
-        payload: { type: object, description: "The environment patch, or `{ from }` for a copy." }
+        payload: { type: object, description: "The environment patch; for a copy `{ from, fromVersion, state }` — the source as it was when requested, which is what approval applies." }
         status: { type: string, enum: [pending, approved, rejected] }
         requestedBy: { type: string }
         requestedAt: { type: string, format: date-time }

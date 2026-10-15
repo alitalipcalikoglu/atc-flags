@@ -173,7 +173,12 @@ export class FlagsApi {
       const q = /** @type {{ status?: any, key?: string, limit?: string }} */ (request.query);
       return { items: this.changes.list({ status: q.status, key: q.key, envs: request.apiKey.envs ?? null, limit: q.limit ? Number(q.limit) : 50 }).map(Views.change), protectedEnvs: this.config.protectedEnvs };
     });
-    const change = (/** @type {FastifyRequest} */ r) => { const c = this.changes.get(/** @type {{ id: string }} */ (r.params).id); ApiKeyAuth.assertEnv(r.apiKey, c.env); return c; };
+    const change = (/** @type {FastifyRequest} */ r) => {
+      const c = this.changes.get(/** @type {{ id: string }} */ (r.params).id);
+      ApiKeyAuth.assertEnv(r.apiKey, c.env);
+      if (c.kind === 'copy') ApiKeyAuth.assertEnv(r.apiKey, JSON.parse(c.payload).from); // the approver must be allowed to see the source too
+      return c;
+    };
     api.post('/changes/:id/approve', { config: { audit: AuditClient.route('atc-flags.change.approve', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams } }, async (request) => {
       const c = change(request);
       const r = this.changes.approve(c.id, actor(request));
