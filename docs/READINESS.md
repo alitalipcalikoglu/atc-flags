@@ -17,6 +17,10 @@ rules on user id / email / attributes, and a full change history.
   fails a flags request. If audit stays unreachable, events accumulate in an in-memory ring buffer
   (`MAX_BUFFER = 5_000`, oldest dropped with a warning once full) and are lost on process restart —
   there is no on-disk queue.
+- `atc-webhook-out` (`WEBHOOK_OUT_URL` + `WEBHOOK_OUT_API_KEY`, a publish-role key): optional,
+  both-or-neither. `flag.changed` events are published best effort from a bounded in-memory queue (500
+  events, three retries, an idempotency key each) in the background; the request path never waits
+  on it, and events still queued at a restart are lost (atc-stack `docs/EVENTS.md`).
 
 No other service or external system is called by `atc-flags`.
 
@@ -107,6 +111,11 @@ rather than being retried immediately. Logic lives entirely in `src/net/audit-cl
 ## Idempotency
 - `POST /v1/flags` (create) is **not** idempotent: a repeat with the same `key` fails
   `409 FLAG_EXISTS` rather than silently succeeding.
+- `POST /v1/flags`, `POST /v1/flags/:key/envs/:env/copy`, `POST /v1/changes/:id/approve` and
+  `POST /v1/changes/:id/reject` accept an optional `Idempotency-Key` header
+  (`@atc-web/atc-service-core/idempotency`, v1.30): a repeat with the same key, caller and body
+  replays the stored 2xx answer with `Idempotent-Replayed: true` instead of running again, so a
+  timed-out create retried with the header neither duplicates nor hits `409 FLAG_EXISTS`.
 - `PATCH /v1/flags/:key`, `PATCH /v1/flags/:key/envs/:env` are idempotent in *result* for a fixed
   patch body (applying the same patch twice yields the same end state) but each call still appends
   a new `history` row, so the side effect (history growth) is not idempotent even though the state is.
