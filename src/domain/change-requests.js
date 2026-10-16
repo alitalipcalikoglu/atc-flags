@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { Ids } from '@atc-web/atc-service-core/ids';
 import { FlagError } from './errors.js';
 import { FlagService } from './flag-service.js';
 
@@ -59,7 +59,7 @@ export class ChangeRequests {
       const src = this.service.envState(key, /** @type {string} */ (payload.from));
       payload = { from: payload.from, fromVersion: Number(src.version), state: FlagService.state(src) };
     }
-    const id = `chg_${now.toString(36)}${randomBytes(6).toString('hex')}`;
+    const id = Ids.create('chg', now);
     this.db.transaction(() => {
       this.stmt.insert.run(id, key, env, kind, JSON.stringify(payload), Number(row.version), actor, now);
       this.service.history.record({ key, env, action: 'change.requested', actor, before: FlagService.state(row), after: { change: id, kind, ...payload } }, now);
@@ -109,7 +109,7 @@ export class ChangeRequests {
 
   /**
    * Newest first.
-   * @param {{ status?: 'pending'|'approved'|'rejected', key?: string, envs?: string[]|null, limit: number }} q
+   * @param {{ status?: 'pending'|'approved'|'rejected', key?: string, envs?: string[]|null, limit: number, before?: string }} q  `before`: id cursor (ids sort by creation time).
    * @returns {ChangeRow[]}
    */
   list(q) {
@@ -118,7 +118,8 @@ export class ChangeRequests {
     if (q.status) { where.push('status = ?'); args.push(q.status); }
     if (q.key) { where.push('flag_key = ?'); args.push(q.key); }
     if (q.envs) { where.push(`env IN (${q.envs.map(() => '?').join(', ') || 'NULL'})`); args.push(...q.envs); }
-    return /** @type {ChangeRow[]} */ (this.db.prepare(`SELECT * FROM changes ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY requested_at DESC, id DESC LIMIT ?`).all(...args, q.limit));
+    if (q.before) { where.push('id < ?'); args.push(q.before); }
+    return /** @type {ChangeRow[]} */ (this.db.prepare(`SELECT * FROM changes ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`).all(...args, q.limit));
   }
 
   pendingCount() { return Number(/** @type {{ n: number }} */ (this.stmt.pendingCount.get()).n); }

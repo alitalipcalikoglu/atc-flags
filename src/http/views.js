@@ -35,6 +35,6 @@ export class Views {
 
   /** @param {HistoryRow} h */
   static history(h) {
-    return { id: Number(h.id), key: h.key, env: h.env, action: h.action, actor: h.actor, before: h.before === null ? null : JSON.parse(h.before), after: h.after === null ? null : JSON.parse(h.after), at: Views.iso(h.at) };
+    return { seq: Number(h.id), key: h.key, env: h.env, action: h.action, actor: h.actor, before: h.before === null ? null : JSON.parse(h.before), after: h.after === null ? null : JSON.parse(h.after), at: Views.iso(h.at) };
   }
 }

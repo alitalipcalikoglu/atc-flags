@@ -1,3 +1,4 @@
+import { Ids } from '@atc-web/atc-service-core/ids';
 /** JSON Schemas for the HTTP surface. */
 export class Schemas {
   static key = { type: 'string', pattern: '^[a-z0-9]+([.\\-_][a-z0-9]+)*$', maxLength: 80 };
@@ -37,10 +38,10 @@ export class Schemas {
     },
   };
 
-  static changeParams = { type: 'object', properties: { id: { type: 'string', pattern: '^chg_[0-9a-z]{6,12}[0-9a-f]{12}$' } }, required: ['id'] };
-  static changesQuery = { type: 'object', additionalProperties: false, properties: { status: { type: 'string', enum: ['pending', 'approved', 'rejected'] }, key: Schemas.key, limit: { type: 'string', pattern: '^([1-9]|[1-9][0-9]|100)$' } } };
+  static changeParams = { type: 'object', properties: { id: { type: 'string', pattern: Ids.pattern('chg') } }, required: ['id'] };
+  static changesQuery = { type: 'object', additionalProperties: false, properties: { status: { type: 'string', enum: ['pending', 'approved', 'rejected'] }, key: Schemas.key, limit: { type: 'string', pattern: '^([1-9]|[1-9][0-9]|100)$' }, cursor: { type: 'string', pattern: Ids.pattern('chg') } } };
   static rejectChange = { type: ['object', 'null'], additionalProperties: false, properties: { note: { type: 'string', maxLength: 500 } } };
-  static historyQuery = { type: 'object', additionalProperties: false, properties: { limit: { type: 'string', pattern: '^([1-9]|[1-9][0-9]|100)$' }, before: { type: 'string', pattern: '^[0-9]{1,15}$' } } };
+  static historyQuery = { type: 'object', additionalProperties: false, properties: { limit: { type: 'string', pattern: '^([1-9]|[1-9][0-9]|100)$' }, cursor: { type: 'string', pattern: '^[0-9]{1,15}$' } } };
 
   static context = {
     type: 'object', additionalProperties: false,

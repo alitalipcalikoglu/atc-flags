@@ -3,6 +3,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { AuditClient } from '@atc-web/atc-service-core/audit';
 import { createErrorHandler, registerInfo, registerOpenApi, registerProbes, registerRequestContext, requestOptions } from '@atc-web/atc-service-core/fastify';
+import { Idempotency } from '@atc-web/atc-service-core/idempotency';
 import { FlagError } from '../domain/errors.js';
 import { ApiKeyAuth } from './api-key-auth.js';
 import { ChangeRequests } from '../domain/change-requests.js';
@@ -71,6 +72,8 @@ export class FlagsApi {
       reply.header('x-content-type-options', 'nosniff');
       if (!reply.hasHeader('cache-control')) reply.header('cache-control', 'no-store');
     });
+    // Opt-in per route (config.idempotent): repeats with the same Idempotency-Key replay the first 2xx answer.
+    Idempotency.register(app, { raw: this.db.raw });
     registerProbes(app, () => this.db.ping(), { cacheMs: FlagsApi.READY_CACHE_MS });
     registerOpenApi(app, new URL('../../openapi.yaml', import.meta.url));
     registerInfo(app, {
@@ -115,10 +118,10 @@ export class FlagsApi {
     };
     const full = (/** @type {FastifyRequest} */ r, /** @type {string} */ k) => Views.flag(s.get(k), this.flags.envsOf(k).filter((e) => this.#visibleEnvs(r).includes(e.env)));
 
-    api.get('/environments', read, async (request) => ({ items: this.#visibleEnvs(request).map((e) => ({ env: e, version: this.flags.version(e) })) }));
+    api.get('/environments', read, async (request) => ({ items: this.#visibleEnvs(request).map((e) => ({ env: e, version: this.flags.version(e) })), nextCursor: null }));
 
     // ---- flags
-    api.post('/flags', { config: { audit: AuditClient.route('atc-flags.flag.create', (_r, b) => ({ type: 'flag', id: b.flag.key })) }, ...write, schema: { body: Schemas.create } }, async (request, reply) => {
+    api.post('/flags', { config: { idempotent: true, audit: AuditClient.route('atc-flags.flag.create', (_r, b) => ({ type: 'flag', id: b.flag.key })) }, ...write, schema: { body: Schemas.create } }, async (request, reply) => {
       const row = s.create(/** @type {any} */ (request.body), actor(request));
       reply.header('location', `/v1/flags/${row.key}`);
       return reply.code(201).send({ flag: full(request, row.key) });
@@ -160,7 +163,7 @@ export class FlagsApi {
       return { env: e, state: Views.env(s.updateEnv(key(request), e, /** @type {any} */ (request.body), actor(request))) };
     });
 
-    api.post('/flags/:key/envs/:env/copy', { config: { audit: AuditClient.route('atc-flags.env.copy', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, ...(/** @type {object} */ (r.body ?? {})) })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.copyEnv } }, async (request, reply) => {
+    api.post('/flags/:key/envs/:env/copy', { config: { idempotent: true, audit: AuditClient.route('atc-flags.env.copy', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ env: /** @type {any} */ (r.params).env, ...(/** @type {object} */ (r.body ?? {})) })) }, ...write, schema: { params: Schemas.keyEnvParams, body: Schemas.copyEnv } }, async (request, reply) => {
       const to = /** @type {{ to: string }} */ (request.body).to;
       s.assertEnv(to);
       ApiKeyAuth.assertEnv(request.apiKey, to);
@@ -170,8 +173,11 @@ export class FlagsApi {
 
     // ---- change requests (two-person rule on PROTECTED_ENVS)
     api.get('/changes', { ...read, schema: { querystring: Schemas.changesQuery } }, async (request) => {
-      const q = /** @type {{ status?: any, key?: string, limit?: string }} */ (request.query);
-      return { items: this.changes.list({ status: q.status, key: q.key, envs: request.apiKey.envs ?? null, limit: q.limit ? Number(q.limit) : 50 }).map(Views.change), protectedEnvs: this.config.protectedEnvs };
+      const q = /** @type {{ status?: any, key?: string, limit?: string, cursor?: string }} */ (request.query);
+      const limit = q.limit ? Number(q.limit) : 50;
+      const rows = this.changes.list({ status: q.status, key: q.key, envs: request.apiKey.envs ?? null, limit: limit + 1, before: q.cursor });
+      const items = rows.slice(0, limit);
+      return { items: items.map(Views.change), nextCursor: rows.length > limit ? items.at(-1)?.id ?? null : null, protectedEnvs: this.config.protectedEnvs };
     });
     const change = (/** @type {FastifyRequest} */ r) => {
       const c = this.changes.get(/** @type {{ id: string }} */ (r.params).id);
@@ -179,12 +185,12 @@ export class FlagsApi {
       if (c.kind === 'copy') ApiKeyAuth.assertEnv(r.apiKey, JSON.parse(c.payload).from); // the approver must be allowed to see the source too
       return c;
     };
-    api.post('/changes/:id/approve', { config: { audit: AuditClient.route('atc-flags.change.approve', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams } }, async (request) => {
+    api.post('/changes/:id/approve', { config: { idempotent: true, audit: AuditClient.route('atc-flags.change.approve', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams } }, async (request) => {
       const c = change(request);
       const r = this.changes.approve(c.id, actor(request));
       return { change: Views.change(r.change), env: c.env, state: Views.env(r.state) };
     });
-    api.post('/changes/:id/reject', { config: { audit: AuditClient.route('atc-flags.change.reject', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams, body: Schemas.rejectChange } }, async (request) => {
+    api.post('/changes/:id/reject', { config: { idempotent: true, audit: AuditClient.route('atc-flags.change.reject', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams, body: Schemas.rejectChange } }, async (request) => {
       const c = change(request);
       return { change: Views.change(this.changes.reject(c.id, actor(request), /** @type {{ note?: string }} */ (request.body ?? {}).note ?? null)) };
     });
@@ -243,13 +249,13 @@ export class FlagsApi {
 
   /**
    * @param {string|null} key
-   * @param {{ limit?: string, before?: string }} q
+   * @param {{ limit?: string, cursor?: string }} q
    */
   #history(key, q) {
     const limit = q.limit ? Number(q.limit) : 50;
-    const rows = this.history.list(key, { limit: limit + 1, beforeId: q.before ? Number(q.before) : undefined });
+    const rows = this.history.list(key, { limit: limit + 1, beforeId: q.cursor ? Number(q.cursor) : undefined });
     const items = rows.slice(0, limit);
-    return { items: items.map(Views.history), nextBefore: rows.length > limit ? String(items.at(-1)?.id) : null };
+    return { items: items.map(Views.history), nextCursor: rows.length > limit ? String(items.at(-1)?.id) : null };
   }
 
   /** @param {FastifyInstance} ops */

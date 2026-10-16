@@ -152,8 +152,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, nextCursor]
                 properties:
+                  nextCursor: { type: "null", description: Always null; the list is complete. }
                   items:
                     type: array
                     items:
@@ -169,6 +170,8 @@ paths:
   /v1/flags:
     post:
       operationId: atc-flags.flags.create
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Create a flag
       description: >
         Creates the flag and seeds identical initial state in every configured environment
@@ -350,19 +353,22 @@ paths:
         - { name: status, in: query, required: false, schema: { type: string, enum: [pending, approved, rejected] } }
         - { name: key, in: query, required: false, schema: { $ref: "#/components/schemas/FlagKey" } }
         - { name: limit, in: query, required: false, schema: { type: string, pattern: "^([1-9]|[1-9][0-9]|100)$" } }
+        - { name: cursor, in: query, required: false, description: Opaque `nextCursor` from the previous page., schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{16}$" } }
       responses:
         "200":
           description: Requests.
           content:
             application/json:
-              schema: { type: object, required: [items, protectedEnvs], properties: { items: { type: array, items: { $ref: "#/components/schemas/Change" } }, protectedEnvs: { type: array, items: { type: string } } } }
+              schema: { type: object, required: [items, nextCursor, protectedEnvs], properties: { items: { type: array, items: { $ref: "#/components/schemas/Change" } }, nextCursor: { type: [string, "null"] }, protectedEnvs: { type: array, items: { type: string } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/changes/{id}/approve:
-    parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{12}$" } }]
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{16}$" } }]
     post:
       operationId: atc-flags.changes.approve
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Approve and apply a change request
       description: Needs a write key and a different actor than the requester (the console names the person in X-Actor; ACTOR_KEYS). A request whose environment changed after it was made is closed as stale (`409 CHANGE_STALE`).
       tags: [changes]
@@ -380,9 +386,11 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/changes/{id}/reject:
-    parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{12}$" } }]
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: "^chg_[0-9a-z]{6,12}[0-9a-f]{16}$" } }]
     post:
       operationId: atc-flags.changes.reject
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Reject a change request (or withdraw your own)
       tags: [changes]
       x-stack-visibility: authenticated
@@ -496,6 +504,7 @@ paths:
       tags: [flags]
       x-stack-visibility: authenticated
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - $ref: "#/components/parameters/KeyParam"
         - $ref: "#/components/parameters/EnvParam"
       requestBody:
@@ -682,6 +691,12 @@ components:
         regardless of role — see that operation's own description.
 
   parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: "Optional. Repeats of this POST with the same key (per API key, 24 h) replay the first 2xx answer with `Idempotent-Replayed: true` instead of running again; the same key with another method, path or body is `409 IDEMPOTENCY_MISMATCH`, while the first still runs `409 IDEMPOTENCY_IN_PROGRESS`."
+      schema: { type: string, pattern: '^[A-Za-z0-9._:-]{8,255}$' }
     KeyParam:
       name: key
       in: path
@@ -699,10 +714,10 @@ components:
       schema: { type: string, pattern: "^([1-9]|[1-9][0-9]|100)$" }
       description: Default 50, max 100.
     HistoryBefore:
-      name: before
+      name: cursor
       in: query
       schema: { type: string, pattern: "^[0-9]{1,15}$" }
-      description: Return entries with an id before this cursor (exclusive, descending order).
+      description: Opaque `nextCursor` from the previous page.
 
   responses:
     Unauthorized:
@@ -766,10 +781,10 @@ components:
         application/json:
           schema:
             type: object
-            required: [items, nextBefore]
+            required: [items, nextCursor]
             properties:
               items: { type: array, items: { $ref: "#/components/schemas/HistoryEntry" } }
-              nextBefore: { type: [string, "null"] }
+              nextCursor: { type: [string, "null"] }
     EvaluateOk:
       description: >
         Evaluation result. `x-flags-version` is always set to the environment's current version
@@ -955,9 +970,9 @@ components:
 
     HistoryEntry:
       type: object
-      required: [id, key, env, action, actor, before, after, at]
+      required: [seq, key, env, action, actor, before, after, at]
       properties:
-        id: { type: integer }
+        seq: { type: integer, description: Position in the history log (log rows expose `seq`, never `id`). }
         key: { type: string }
         env: { type: [string, "null"], description: "null for flag-level actions (flag.create/update/delete); an environment name for env.update/env.copy." }
         action: { type: string, enum: ["flag.create", "flag.update", "flag.delete", "env.update", "env.copy"] }

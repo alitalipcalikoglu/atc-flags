@@ -90,6 +90,11 @@ if (flags['checkout.new'] === true) return renderNewCheckout();
 
 Cache answers and fall back to safe defaults when the service is unreachable; a buffered client and a snapshot-based local evaluator are in [examples/](examples/README.md).
 
+## Conventions
+
+- Lists answer `{ items, nextCursor }`; pass `nextCursor` back as `cursor`. History rows carry `seq` (log position), change requests `chg_<time><random>` ids (the platform's one id format); flag keys are natural keys.
+- Flag creation, environment copy and change approval/rejection honour `Idempotency-Key`: a repeat with the same key (per API key and caller — the console's `X-Actor` counts — for 24 h) replays the first 2xx answer with `Idempotent-Replayed: true`; another body is `409 IDEMPOTENCY_MISMATCH`.
+
 ## Examples
 
 Scenario walkthroughs for every feature live in [examples/](examples/README.md).

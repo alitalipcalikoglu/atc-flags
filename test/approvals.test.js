@@ -60,3 +60,26 @@ test('two-person rule: the approver needs access to the source environment of a 
   const res = await app.inject({ method: 'POST', url: `/v1/changes/${c.id}/approve`, headers: bearer('q'.repeat(40)) });
   assert.equal(res.statusCode, 403, 'a key scoped to prod alone cannot approve a copy from staging');
 });
+
+test('Idempotency-Key: a retried approval replays; another person with the same key is never served it; change list pages', async (t) => {
+  const { app } = await buildApp({ PROTECTED_ENVS: 'prod', ACTOR_KEYS: 'console' });
+  t.after(() => app.close());
+  const as = (/** @type {string} */ person, /** @type {Record<string, string>} */ extra = {}) => ({ ...bearer(RW_KEY), 'x-actor': person, 'content-type': 'application/json', ...extra });
+  await app.inject({ method: 'POST', url: '/v1/flags', payload: { key: 'f.one', kind: 'boolean' }, headers: as('ada') });
+  for (const pct of [10, 20]) await app.inject({ method: 'PATCH', url: '/v1/flags/f.one/envs/prod', payload: { enabled: true, percentage: pct }, headers: as('ada') });
+  const page1 = (await app.inject({ url: '/v1/changes?limit=1', headers: as('grace') })).json();
+  assert.equal(page1.items.length, 1);
+  assert.match(page1.items[0].id, /^chg_[0-9a-z]{6,12}[0-9a-f]{16}$/);
+  const page2 = (await app.inject({ url: `/v1/changes?limit=1&cursor=${page1.nextCursor}`, headers: as('grace') })).json();
+  assert.equal(page2.items.length, 1);
+  assert.notEqual(page2.items[0].id, page1.items[0].id);
+  assert.equal(page2.nextCursor, null);
+  const id = page2.items[0].id;
+  const h = as('grace', { 'idempotency-key': 'approve-key-1' });
+  const first = await app.inject({ method: 'POST', url: `/v1/changes/${id}/approve`, headers: h, payload: {} });
+  const again = await app.inject({ method: 'POST', url: `/v1/changes/${id}/approve`, headers: h, payload: {} });
+  assert.deepEqual([first.statusCode, again.statusCode, again.headers['idempotent-replayed']], [200, 200, 'true']);
+  const ada = await app.inject({ method: 'POST', url: `/v1/changes/${id}/approve`, headers: as('ada', { 'idempotency-key': 'approve-key-1' }), payload: {} });
+  assert.equal(ada.headers['idempotent-replayed'], undefined);
+  assert.notEqual(ada.statusCode, 200, 'runs for real: the requester cannot approve, and it is closed anyway');
+});

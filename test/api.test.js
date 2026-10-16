@@ -82,7 +82,7 @@ test('API: flag lifecycle, environment state, copy, history', async (t) => {
   assert.equal(json(res).items[1].after.from, 'staging');
   res = await app.inject({ url: '/v1/history?limit=2', headers: bearer(READ_KEY) });
   assert.equal(json(res).items.length, 2);
-  assert.ok(json(res).nextBefore);
+  assert.ok(json(res).nextCursor);
   assert.equal((await app.inject({ method: 'DELETE', url: '/v1/flags/checkout.new', headers: bearer(PROD_KEY) })).statusCode, 403, 'scoped keys cannot delete');
   assert.equal((await app.inject({ method: 'DELETE', url: '/v1/flags/checkout.new', headers: bearer(RW_KEY) })).statusCode, 204);
   assert.equal((await app.inject({ url: '/v1/flags/checkout.new', headers: bearer(READ_KEY) })).statusCode, 404);
