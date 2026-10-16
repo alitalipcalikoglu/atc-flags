@@ -75,5 +75,27 @@ export class Database extends CoreDatabase {
     CREATE INDEX changes_status ON changes (status, requested_at DESC);
     CREATE INDEX changes_flag ON changes (flag_key, requested_at DESC);
     `,
+    `
+    -- Flag-level changes (archive, reshuffle, delete) go through approval too; SQLite cannot widen a CHECK, so the table is rebuilt.
+    CREATE TABLE changes_v2 (
+      id            TEXT PRIMARY KEY,
+      flag_key      TEXT NOT NULL,
+      env           TEXT NOT NULL,
+      kind          TEXT NOT NULL CHECK (kind IN ('update', 'copy', 'flag')),
+      payload       TEXT NOT NULL,
+      base_updated  INTEGER NOT NULL,
+      status        TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      requested_by  TEXT NOT NULL,
+      requested_at  INTEGER NOT NULL,
+      decided_by    TEXT,
+      decided_at    INTEGER,
+      note          TEXT
+    );
+    INSERT INTO changes_v2 SELECT id, flag_key, env, kind, payload, base_updated, status, requested_by, requested_at, decided_by, decided_at, note FROM changes;
+    DROP TABLE changes;
+    ALTER TABLE changes_v2 RENAME TO changes;
+    CREATE INDEX changes_status ON changes (status, requested_at DESC);
+    CREATE INDEX changes_flag ON changes (flag_key, requested_at DESC);
+    `,
   ];
 }

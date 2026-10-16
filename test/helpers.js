@@ -34,7 +34,7 @@ export function testService(overrides, publisher) {
   const db = new Database(':memory:');
   const flags = new FlagStore(db);
   const history = new HistoryStore(db);
-  const service = new FlagService({ db, flags, history, check: new ValueCheck(config.maxValueBytes), environments: config.environments, publisher });
+  const service = new FlagService({ db, flags, history, check: new ValueCheck(config.maxValueBytes), environments: config.environments, publisher, protectedEnvs: config.protectedEnvs });
   return { config, db, flags, history, service };
 }
 

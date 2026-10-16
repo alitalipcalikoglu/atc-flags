@@ -87,3 +87,30 @@ test('Idempotency-Key: a retried approval replays; another person with the same 
   assert.equal(ada.headers['idempotent-replayed'], undefined);
   assert.notEqual(ada.statusCode, 200, 'runs for real: the requester cannot approve, and it is closed anyway');
 });
+
+test('two-person rule: creating a flag never starts it enabled in prod; archive, reshuffle and delete are reviewed changes', async (t) => {
+  const { app } = await buildApp({ PROTECTED_ENVS: 'prod', ACTOR_KEYS: 'console' });
+  t.after(() => app.close());
+  const call = (/** @type {string} */ method, /** @type {string} */ url, /** @type {any} */ payload = undefined, person = 'ada') => app.inject({ method: /** @type {any} */ (method), url, payload, headers: { ...bearer(RW_KEY), 'x-actor': person, ...(payload === undefined ? {} : { 'content-type': 'application/json' }) } });
+  let res = await call('POST', '/v1/flags', { key: 'pay.fast', kind: 'boolean', enabled: true });
+  assert.equal(res.statusCode, 201);
+  assert.deepEqual([res.json().flag.environments.staging.enabled, res.json().flag.environments.prod.enabled], [true, false], 'enabled everywhere except the protected environment');
+
+  res = await call('PATCH', '/v1/flags/pay.fast', { archived: true });
+  assert.deepEqual([res.statusCode, res.json().change.kind, res.json().change.env, res.json().change.payload], [202, 'flag', 'prod', { archived: true }]);
+  assert.equal((await call('GET', '/v1/flags/pay.fast')).json().flag.archived, false, 'nothing changed yet');
+  assert.equal((await call('PATCH', '/v1/flags/pay.fast', { description: 'faster checkout' })).statusCode, 200, 'description and tags need no review');
+  assert.equal((await call('POST', `/v1/changes/${res.json().change.id}/approve`, {}, 'ada')).json().error.code, 'SELF_APPROVAL');
+  res = await call('POST', `/v1/changes/${res.json().change.id}/approve`, {}, 'grace');
+  assert.equal(res.statusCode, 200, res.body);
+  assert.equal((await call('GET', '/v1/flags/pay.fast')).json().flag.archived, true, 'approved: archived everywhere');
+
+  res = await call('PATCH', '/v1/flags/pay.fast', { reshuffle: true });
+  assert.deepEqual([res.statusCode, res.json().change.payload], [202, { reshuffle: true }]);
+  res = await call('DELETE', '/v1/flags/pay.fast');
+  assert.deepEqual([res.statusCode, res.json().change.payload], [202, { delete: true }]);
+  assert.equal((await call('GET', '/v1/flags/pay.fast')).statusCode, 200, 'still there');
+  res = await call('POST', `/v1/changes/${res.json().change.id}/approve`, {}, 'grace');
+  assert.deepEqual([res.statusCode, res.json().state], [200, null]);
+  assert.equal((await call('GET', '/v1/flags/pay.fast')).statusCode, 404, 'deleted once a second person approved');
+});

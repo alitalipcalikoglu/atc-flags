@@ -34,6 +34,6 @@ Anyone with a write key may reject, including the requester (withdraw). Closed r
 
 ## Pitfalls
 
-- Creating, archiving and deleting a flag are not gated (a new flag starts off; delete removes it everywhere). Keep delete rights on few keys.
+- A new flag starts off in every protected environment even with `enabled: true` (turn it on there through a request). Archiving, reshuffling and deleting touch every environment, so they are requests of kind `flag` (`PATCH /v1/flags/:key {"archived":true}` or `DELETE /v1/flags/:key` answer `202 { change }`) reviewed like a change to the first protected environment; the approver needs access to it. Only `description` and `tags` change at once.
 - Without `ACTOR_KEYS`, everyone using the console is one actor (the console key) and could never approve their colleagues' requests. With it, a leaked console key still cannot play two people: it has to name one, and the name is what the rule compares.
 - Evaluation and snapshots never show pending requests.

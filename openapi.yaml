@@ -175,7 +175,8 @@ paths:
       summary: Create a flag
       description: >
         Creates the flag and seeds identical initial state in every configured environment
-        (`enabled`, `value`, `offValue` default per `kind`, `percentage` 100, no rules).
+        (`enabled`, `value`, `offValue` default per `kind`, `percentage` 100, no rules), except that
+        a `PROTECTED_ENVS` environment always starts disabled: turning it on there is a reviewed change.
         Requires a `write`-capable key.
       tags: [flags]
       x-stack-visibility: authenticated
@@ -293,6 +294,11 @@ paths:
                 required: [flag]
                 properties:
                   flag: { $ref: "#/components/schemas/Flag" }
+        "202":
+          description: With `PROTECTED_ENVS`, `archived` and `reshuffle` touch every environment and so wait for another person like a change to the first protected environment; nothing changed yet. `description` and `tags` alone still apply at once.
+          content:
+            application/json:
+              schema: { type: object, required: [change], properties: { change: { $ref: "#/components/schemas/Change" } } }
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -312,6 +318,11 @@ paths:
       responses:
         "204":
           description: Deleted. No body.
+        "202":
+          description: With `PROTECTED_ENVS` the deletion waits for another person's approval (a `flag` change on the first protected environment); the flag is still there.
+          content:
+            application/json:
+              schema: { type: object, required: [change], properties: { change: { $ref: "#/components/schemas/Change" } } }
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
@@ -822,8 +833,8 @@ components:
         id: { type: string }
         key: { type: string }
         env: { type: string }
-        kind: { type: string, enum: [update, copy] }
-        payload: { type: object, description: "The environment patch; for a copy `{ from, fromVersion, state }` — the source as it was when requested, which is what approval applies." }
+        kind: { type: string, enum: [update, copy, flag] }
+        payload: { type: object, description: "The environment patch; for a copy `{ from, fromVersion, state }` — the source as it was when requested, which is what approval applies; for a flag-level change `{ archived? , reshuffle?, delete? }`, applied to every environment on approval." }
         status: { type: string, enum: [pending, approved, rejected] }
         requestedBy: { type: string }
         requestedAt: { type: string, format: date-time }

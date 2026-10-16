@@ -25,7 +25,7 @@ export class Application {
     this.db = new Database(config.dbPath, { backupDir: config.dbBackupDir });
     this.flags = new FlagStore(this.db);
     this.history = new HistoryStore(this.db);
-    this.service = new FlagService({ db: this.db, flags: this.flags, history: this.history, check: new ValueCheck(config.maxValueBytes), environments: config.environments, publisher: this.publisher });
+    this.service = new FlagService({ db: this.db, flags: this.flags, history: this.history, check: new ValueCheck(config.maxValueBytes), environments: config.environments, publisher: this.publisher, protectedEnvs: config.protectedEnvs });
     /** @type {import('fastify').FastifyInstance|null} */
     this.app = null;
     /** @type {Maintenance|null} */

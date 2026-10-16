@@ -139,13 +139,23 @@ export class FlagsApi {
 
     api.get('/flags/:key', { ...read, schema: { params: Schemas.keyParams } }, async (request) => ({ flag: full(request, key(request)) }));
 
-    api.patch('/flags/:key', { config: { audit: AuditClient.route('atc-flags.flag.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ patch: r.body })) }, ...write, schema: { params: Schemas.keyParams, body: Schemas.patchFlag } }, async (request) => {
+    // Archiving, reshuffling and deleting change every environment at once, so with PROTECTED_ENVS they are
+    // reviewed like a change to the first protected environment (the key must have access to it).
+    const flagLevelRequest = (/** @type {FastifyRequest} */ r, /** @type {Record<string, unknown>} */ payload) => {
+      const e = this.config.protectedEnvs[0];
+      ApiKeyAuth.assertEnv(r.apiKey, e);
+      return this.changes.request(key(r), e, 'flag', payload, actor(r));
+    };
+    api.patch('/flags/:key', { config: { audit: AuditClient.route('atc-flags.flag.update', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key }), (r) => ({ patch: r.body })) }, ...write, schema: { params: Schemas.keyParams, body: Schemas.patchFlag } }, async (request, reply) => {
+      const patch = /** @type {{ archived?: boolean, reshuffle?: boolean }} */ (request.body);
+      if (this.config.protectedEnvs.length && (patch.archived !== undefined || patch.reshuffle)) return reply.code(202).send({ change: Views.change(flagLevelRequest(request, { archived: patch.archived, reshuffle: patch.reshuffle })) });
       s.update(key(request), /** @type {any} */ (request.body), actor(request));
       return { flag: full(request, key(request)) };
     });
 
     api.delete('/flags/:key', { config: { audit: AuditClient.route('atc-flags.flag.delete', (r) => ({ type: 'flag', id: /** @type {any} */ (r.params).key })) }, ...write, schema: { params: Schemas.keyParams } }, async (request, reply) => {
       if (request.apiKey.envs) throw new FlagError('FORBIDDEN', 'an environment-scoped key cannot delete flags');
+      if (this.config.protectedEnvs.length) return reply.code(202).send({ change: Views.change(flagLevelRequest(request, { delete: true })) });
       s.remove(key(request), actor(request));
       return reply.code(204).send();
     });
@@ -191,7 +201,7 @@ export class FlagsApi {
     api.post('/changes/:id/approve', { config: { idempotent: true, audit: AuditClient.route('atc-flags.change.approve', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams } }, async (request) => {
       const c = change(request);
       const r = this.changes.approve(c.id, actor(request));
-      return { change: Views.change(r.change), env: c.env, state: Views.env(r.state) };
+      return { change: Views.change(r.change), env: c.env, state: r.state ? Views.env(r.state) : null };
     });
     api.post('/changes/:id/reject', { config: { idempotent: true, audit: AuditClient.route('atc-flags.change.reject', (r) => ({ type: 'change', id: /** @type {any} */ (r.params).id })) }, ...write, schema: { params: Schemas.changeParams, body: Schemas.rejectChange } }, async (request) => {
       const c = change(request);

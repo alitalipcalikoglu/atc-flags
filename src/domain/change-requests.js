@@ -9,7 +9,7 @@ import { FlagService } from './flag-service.js';
  * @property {string} id
  * @property {string} flag_key
  * @property {string} env
- * @property {'update'|'copy'} kind
+ * @property {'update'|'copy'|'flag'} kind
  * @property {string} payload        JSON: the env patch; for a copy `{ from, fromVersion, state }`, the source as it was when requested.
  * @property {number} base_updated   version of the environment state when the change was requested (any change bumps it).
  * @property {'pending'|'approved'|'rejected'} status
@@ -49,12 +49,16 @@ export class ChangeRequests {
 
   /**
    * Store a change for approval. The payload is validated now (the same checks as applying it).
-   * @param {string} key @param {string} env @param {'update'|'copy'} kind @param {Record<string, unknown>} payload @param {string} actor @param {number} [now]
+   * @param {string} key @param {string} env @param {'update'|'copy'|'flag'} kind @param {Record<string, unknown>} payload @param {string} actor @param {number} [now]
    */
   request(key, env, kind, payload, actor, now = Date.now()) {
     const row = this.service.envState(key, env);
     if (kind === 'update') this.service.validateEnvPatch(key, /** @type {any} */ (payload));
-    else {
+    else if (kind === 'flag') {
+      // Archive, reshuffle or delete: it touches every environment, so the protected one reviews it.
+      const keys = Object.keys(payload).filter((k) => payload[k] !== undefined);
+      if (!keys.length || keys.some((k) => !['archived', 'reshuffle', 'delete'].includes(k))) throw new FlagError('INVALID_VALUE', 'a flag change request carries archived, reshuffle or delete', { where: 'payload' });
+    } else {
       // A copy is reviewed as the source looked now: the snapshot is what gets applied, never the source at approval time.
       const src = this.service.envState(key, /** @type {string} */ (payload.from));
       payload = { from: payload.from, fromVersion: Number(src.version), state: FlagService.state(src) };
@@ -96,7 +100,11 @@ export class ChangeRequests {
       throw new FlagError('CHANGE_STALE', `the ${sourceMoved ? 'source ' : ''}environment changed after this request; it was closed, request the change again`);
     }
     const by = `${actor} (approved ${c.id} by ${c.requested_by})`;
-    const state = this.service.updateEnv(c.flag_key, c.env, c.kind === 'update' ? payload : payload.state, by, now);
+    /** @type {import('../types.js').EnvRow|null} */
+    let state;
+    if (c.kind === 'flag') {
+      if (payload.delete) { this.service.remove(c.flag_key, by, now); state = null; } else { this.service.update(c.flag_key, payload, by, now); state = this.service.envState(c.flag_key, c.env); }
+    } else state = this.service.updateEnv(c.flag_key, c.env, c.kind === 'update' ? payload : payload.state, by, now);
     this.stmt.decide.run('approved', actor, now, null, id);
     return { change: this.get(id), state };
   }

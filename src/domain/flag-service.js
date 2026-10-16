@@ -36,8 +36,11 @@ export class FlagService {
    * @param {ValueCheck} deps.check
    * @param {string[]} deps.environments
    * @param {{ publish: (type: string, data?: unknown) => boolean }} [deps.publisher]
+   * @param {string[]} [deps.protectedEnvs]
    */
-  constructor({ db, flags, history, check, environments, publisher }) {
+  constructor({ db, flags, history, check, environments, publisher, protectedEnvs = [] }) {
+    /** Environments a new flag never starts enabled in: turning it on there is a reviewed change. */
+    this.protectedEnvs = protectedEnvs;
     this.db = db;
     this.flags = flags;
     this.history = history;
@@ -81,7 +84,7 @@ export class FlagService {
         rollout_salt: randomBytes(8).toString('hex'), created_by: actor, created_at: now, updated_at: now,
       });
       for (const env of this.environments) {
-        this.flags.insertEnv({ key: row.key, env, enabled: input.enabled ? 1 : 0, value: JSON.stringify(value), off_value: JSON.stringify(offValue), percentage: 100, rules: '[]', updated_by: actor, updated_at: now });
+        this.flags.insertEnv({ key: row.key, env, enabled: input.enabled && !this.protectedEnvs.includes(env) ? 1 : 0, value: JSON.stringify(value), off_value: JSON.stringify(offValue), percentage: 100, rules: '[]', updated_by: actor, updated_at: now });
       }
       this.history.record({ key: row.key, action: 'flag.create', actor, after: { kind: row.kind, description: row.description, tags: JSON.parse(row.tags), enabled: Boolean(input.enabled), value, offValue } }, now);
       return row;
