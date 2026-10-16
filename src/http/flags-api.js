@@ -111,10 +111,13 @@ export class FlagsApi {
     const write = { preHandler: ApiKeyAuth.require('write') };
     const key = (/** @type {FastifyRequest} */ r) => /** @type {{ key: string }} */ (r.params).key;
     const env = (/** @type {FastifyRequest} */ r) => { const e = /** @type {{ env: string }} */ (r.params).env; s.assertEnv(e); ApiKeyAuth.assertEnv(r.apiKey, e); return e; };
-    // A key in ACTOR_KEYS (the console) names the person acting in X-Actor; the two-person rule compares these.
+    // A key in ACTOR_KEYS (the console) must name the person acting in X-Actor; the two-person rule compares
+    // people, so such a key without a name could request as the key and approve as a person.
     const actor = (/** @type {FastifyRequest} */ r) => {
+      if (!this.config.actorKeys.includes(r.apiKey.id)) return r.apiKey.id;
       const named = r.headers['x-actor'];
-      return this.config.actorKeys.includes(r.apiKey.id) && typeof named === 'string' && /^[A-Za-z0-9._@-]{1,64}$/.test(named) ? `${r.apiKey.id}/${named}` : r.apiKey.id;
+      if (typeof named !== 'string' || !/^[A-Za-z0-9._@-]{1,64}$/.test(named)) throw new FlagError('ACTOR_REQUIRED', 'this key is listed in ACTOR_KEYS and must send X-Actor (the person acting)');
+      return `${r.apiKey.id}/${named}`;
     };
     const full = (/** @type {FastifyRequest} */ r, /** @type {string} */ k) => Views.flag(s.get(k), this.flags.envsOf(k).filter((e) => this.#visibleEnvs(r).includes(e.env)));
 

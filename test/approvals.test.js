@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RW_KEY, bearer, buildApp } from './helpers.js';
+import { RW_KEY, WRITE_KEY, bearer, buildApp } from './helpers.js';
 
 test('two-person rule: prod changes wait for another person; self-approval, stale and closed requests are refused', async (t) => {
-  const { app } = await buildApp({ PROTECTED_ENVS: 'prod', ACTOR_KEYS: 'console' });
+  const { app } = await buildApp({ PROTECTED_ENVS: 'prod', ACTOR_KEYS: 'console,deployer' });
   t.after(() => app.close());
   const as = (/** @type {string} */ person) => ({ ...bearer(RW_KEY), 'x-actor': person, 'content-type': 'application/json' });
   const call = (/** @type {string} */ method, /** @type {string} */ url, /** @type {any} */ payload = undefined, person = 'ada') => app.inject({ method: /** @type {any} */ (method), url, payload, headers: as(person) });
@@ -19,6 +19,10 @@ test('two-person rule: prod changes wait for another person; self-approval, stal
   assert.equal((await call('PATCH', '/v1/flags/checkout.new/envs/prod', { value: 'not a boolean' })).statusCode, 400, 'requests are validated up front');
   res = await call('POST', `/v1/changes/${req.id}/approve`, {}, 'ada');
   assert.deepEqual([res.statusCode, res.json().error.code], [403, 'SELF_APPROVAL']);
+  res = await app.inject({ method: 'POST', url: `/v1/changes/${req.id}/approve`, headers: bearer(RW_KEY) });
+  assert.deepEqual([res.statusCode, res.json().error.code], [400, 'ACTOR_REQUIRED'], 'an ACTOR_KEYS key cannot act nameless and so approve as "the key"');
+  res = await app.inject({ method: 'POST', url: `/v1/changes/${req.id}/approve`, headers: { ...bearer(WRITE_KEY), 'x-actor': 'ada' } });
+  assert.deepEqual([res.statusCode, res.json().error.code], [403, 'SELF_APPROVAL'], 'the same person through another ACTOR_KEYS key is still the requester');
   res = await call('POST', `/v1/changes/${req.id}/approve`, {}, 'grace');
   assert.equal(res.statusCode, 200, res.body);
   assert.deepEqual([res.json().change.status, res.json().change.decidedBy, res.json().state.enabled, res.json().state.percentage], ['approved', 'console/grace', true, 10]);

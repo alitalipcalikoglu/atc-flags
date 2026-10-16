@@ -20,7 +20,7 @@ curl -s $FLAGS/v1/changes?status=pending -H "Authorization: Bearer $KEY"
 curl -s -X POST $FLAGS/v1/changes/chg_…/approve -H "Authorization: Bearer $OTHER_KEY"
 ```
 
-`200` with the applied state. The approver must be a different actor than the requester (`403 SELF_APPROVAL`). For a copy the approver needs access to both environments: a key scoped away from the source gets `403 FORBIDDEN`. Actors are API key ids; a key listed in `ACTOR_KEYS` (the admin console) can name the person in `X-Actor`, so two people using the console count as two actors (`console/ada`, `console/grace`). The history shows the approver and the request.
+`200` with the applied state. The approver must be a different actor than the requester (`403 SELF_APPROVAL`). For a copy the approver needs access to both environments: a key scoped away from the source gets `403 FORBIDDEN`. Actors are API key ids; a key listed in `ACTOR_KEYS` (the admin console) must name the person in `X-Actor` on every write (`400 ACTOR_REQUIRED` otherwise), so two people using the console count as two actors (`console/ada`, `console/grace`) and one person stays one person even through two console keys. The history shows the approver and the request.
 
 If the environment — or, for a copy, the source environment — changed after the request was made (another approval, an unprotected path), the approval fails with `409 CHANGE_STALE` and the request is closed: nobody applies something they did not review. Request it again.
 
@@ -35,5 +35,5 @@ Anyone with a write key may reject, including the requester (withdraw). Closed r
 ## Pitfalls
 
 - Creating, archiving and deleting a flag are not gated (a new flag starts off; delete removes it everywhere). Keep delete rights on few keys.
-- Without `ACTOR_KEYS`, everyone using the console is one actor (the console key) and could never approve their colleagues' requests.
+- Without `ACTOR_KEYS`, everyone using the console is one actor (the console key) and could never approve their colleagues' requests. With it, a leaked console key still cannot play two people: it has to name one, and the name is what the rule compares.
 - Evaluation and snapshots never show pending requests.

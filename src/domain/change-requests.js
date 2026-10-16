@@ -67,6 +67,13 @@ export class ChangeRequests {
     return this.get(id);
   }
 
+  /** Actors are `<key>` or `<key>/<person>`; the same person through two ACTOR_KEYS keys is still one person. @param {string} a @param {string} b */
+  static samePerson(a, b) {
+    const person = (/** @type {string} */ x) => (x.includes('/') ? x.slice(x.indexOf('/') + 1) : null);
+    const pa = person(a); const pb = person(b);
+    return a === b || (pa !== null && pa === pb);
+  }
+
   /** @param {string} id @returns {ChangeRow} */
   get(id) {
     const c = /** @type {ChangeRow|undefined} */ (this.stmt.get.get(id));
@@ -80,7 +87,7 @@ export class ChangeRequests {
    */
   approve(id, actor, now = Date.now()) {
     const c = this.#pending(id);
-    if (c.requested_by === actor) throw new FlagError('SELF_APPROVAL', 'a change needs the approval of someone other than its requester');
+    if (ChangeRequests.samePerson(c.requested_by, actor)) throw new FlagError('SELF_APPROVAL', 'a change needs the approval of someone other than its requester');
     const current = this.service.envState(c.flag_key, c.env);
     const payload = JSON.parse(c.payload);
     const sourceMoved = c.kind === 'copy' && Number(this.service.envState(c.flag_key, payload.from).version) !== payload.fromVersion;

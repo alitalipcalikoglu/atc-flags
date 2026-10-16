@@ -12,6 +12,7 @@ export class FlagError extends Error {
     VALUE_TOO_LARGE: 413,
     INVALID_CURSOR: 400,
     FORBIDDEN: 403,
+    ACTOR_REQUIRED: 400,
     CHANGE_NOT_FOUND: 404,
     SELF_APPROVAL: 403,
     CHANGE_STALE: 409,

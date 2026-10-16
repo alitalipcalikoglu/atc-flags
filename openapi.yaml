@@ -380,7 +380,8 @@ paths:
             application/json:
               schema: { type: object, properties: { change: { $ref: "#/components/schemas/Change" }, env: { type: string }, state: { $ref: "#/components/schemas/EnvironmentState" } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { description: "`FORBIDDEN` or `SELF_APPROVAL`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "400": { description: "`ACTOR_REQUIRED`: a key in ACTOR_KEYS sent no X-Actor.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "403": { description: "`FORBIDDEN` or `SELF_APPROVAL` (the same person, through any key, cannot approve their own request).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: "`CHANGE_NOT_FOUND`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "409": { description: "`CHANGE_CLOSED` or `CHANGE_STALE`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "429": { $ref: "#/components/responses/RateLimited" }
